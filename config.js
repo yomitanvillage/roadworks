@@ -27,6 +27,11 @@ window.RW_CONFIG = {
 
   // 公開ページ下部のリンク・問い合わせ先
   officialUrl: "https://www.vill.yomitan.okinawa.jp/kurashi/doro_kotsu/7239.html",
-  contactText: "読谷村役場 都市計画課　098-982-9220"
+  contactText: "読谷村役場 都市計画課　098-982-9220",
+
+  // 試行運用中の表示（本番接続中でも出る）。正式運用になったら "" にすると消えます
+  trialBadge: "試行版",
+  trialNotice: "試行運用中です。正式な情報は村公式ホームページをご確認ください"
+};
 };
 window.RW_CONFIG.demo = !window.RW_CONFIG.firebaseConfig.apiKey;
