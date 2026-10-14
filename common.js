@@ -112,22 +112,27 @@
   const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
   const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
 
-  // デモ版の表示（config.js の apiKey が空のとき、両ページに自動で付く）
-  if (window.RW_CONFIG && window.RW_CONFIG.demo) {
+  // デモ版・試行版の表示
+  //   ・デモモード（config.js の apiKey が空）… 自動で「デモ版」
+  //   ・本番接続中 … config.js の trialBadge に文字があれば表示（空にすれば消える）
+  const CFG = window.RW_CONFIG || {};
+  const badgeText = CFG.demo ? "デモ版" : (CFG.trialBadge || "");
+  const pillText = CFG.demo ? "デモ版・正式な情報ではありません" : (CFG.trialNotice || "");
+  if (badgeText) {
     document.addEventListener("DOMContentLoaded", () => {
-      document.title = "【デモ版】" + document.title;
+      document.title = "【" + badgeText + "】" + document.title;
       const st = document.createElement("style");
       st.textContent = `
         .demo-badge { display: inline-block; vertical-align: middle; margin-left: 8px; background: #ffd23f; color: #3d2e00;
           font-size: 12px; font-weight: 800; letter-spacing: .05em; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
         .demo-pill { position: fixed; left: 12px; bottom: 12px; z-index: 10000; background: #ffd23f; color: #3d2e00;
           font-size: 12px; font-weight: 800; padding: 6px 12px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.25);
-          pointer-events: none; }
+          pointer-events: none; max-width: calc(100vw - 24px); }
         body:has(#v-edit:not([hidden])) .demo-pill { bottom: 84px; }`;
       document.head.appendChild(st);
       const h1 = document.querySelector("header h1");
-      if (h1) h1.insertAdjacentHTML("beforeend", '<span class="demo-badge">デモ版</span>');
-      document.body.insertAdjacentHTML("beforeend", '<div class="demo-pill" aria-hidden="true">デモ版・正式な情報ではありません</div>');
+      if (h1) h1.insertAdjacentHTML("beforeend", '<span class="demo-badge">' + esc(badgeText) + '</span>');
+      if (pillText) document.body.insertAdjacentHTML("beforeend", '<div class="demo-pill" aria-hidden="true">' + esc(pillText) + '</div>');
     });
   }
 
