@@ -33,5 +33,4 @@ window.RW_CONFIG = {
   trialBadge: "試行版",
   trialNotice: "試行運用中です。正式な情報は村公式ホームページをご確認ください"
 };
-};
 window.RW_CONFIG.demo = !window.RW_CONFIG.firebaseConfig.apiKey;
