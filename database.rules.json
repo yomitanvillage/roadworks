@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "roadworks": {
+      "works": {
+        ".read": true,
+        ".indexOn": ["end"],
+        "$id": {
+          ".write": "auth != null && root.child('roadworks/users/' + auth.uid).exists() && (root.child('roadworks/users/' + auth.uid + '/role').val() === 'admin' || ((!data.exists() || data.child('dept').val() === root.child('roadworks/users/' + auth.uid + '/dept').val()) && (!newData.exists() || newData.child('dept').val() === root.child('roadworks/users/' + auth.uid + '/dept').val())))",
+          ".validate": "newData.hasChildren(['type', 'road', 'place', 'geom', 'start', 'end', 'dept', 'updatedAt', 'updatedByUid']) && newData.child('updatedByUid').val() === auth.uid"
+        }
+      },
+      "history": {
+        ".read": "auth != null && root.child('roadworks/users/' + auth.uid).exists()",
+        ".indexOn": ["at"],
+        "$hid": {
+          ".write": "auth != null && !data.exists() && root.child('roadworks/users/' + auth.uid).exists()",
+          ".validate": "newData.hasChildren(['at', 'uid', 'name', 'action', 'workId']) && newData.child('uid').val() === auth.uid"
+        }
+      },
+      "users": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      }
+    }
+  }
+}

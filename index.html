@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>読谷村 道路工事・交通規制マップ</title>
+  <meta name="description" content="読谷村内の道路工事・交通規制の場所と日程を地図で確認できます。" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script src="demo-data.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif; background: #f3f4f6; color: #1a1a1a; min-height: 100vh; }
+    header { background: #1d3557; color: #fff; padding: 14px 20px 12px; }
+    header h1 { font-size: 18px; font-weight: 700; }
+    header p  { font-size: 14px; opacity: .8; margin-top: 2px; }
+    .realtime-bar { background: #14253d; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 7px 16px; font-size: 13px; flex-wrap: wrap; }
+    .dot { width: 8px; height: 8px; background: #7fb3ff; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .demo-bar { background: #fff3c4; color: #6b4f00; font-size: 13px; text-align: center; padding: 6px 12px; }
+
+    .app { max-width: 760px; margin: 0 auto; padding: 14px 16px 32px; }
+
+    .summary { display: flex; gap: 10px; margin-bottom: 12px; }
+    .sum-box { flex: 1; background: #fff; border: 1px solid #e2e5ea; border-radius: 12px; padding: 10px 12px; }
+    .sum-num { font-size: 26px; font-weight: 800; line-height: 1.1; }
+    .sum-label { font-size: 13px; color: #666; }
+    .sum-active .sum-num { color: #c1121f; }
+    .sum-planned .sum-num { color: #1d3557; }
+
+    .chips { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .chip { border: 1px solid #c8ced6; background: #fff; border-radius: 20px; padding: 8px 14px; font-size: 15px; cursor: pointer; font-family: inherit; color: #333; }
+    .chip.on { background: #1d3557; border-color: #1d3557; color: #fff; font-weight: 700; }
+
+    #map { height: 52vh; min-height: 300px; max-height: 520px; border-radius: 12px; border: 1px solid #d5dae1; z-index: 0; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: #444; margin: 8px 2px 16px; }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .sw { width: 22px; height: 6px; border-radius: 3px; display: inline-block; }
+    .sw.dash { background: repeating-linear-gradient(90deg, #888 0 5px, transparent 5px 9px) !important; }
+
+    .pin { width: 34px; height: 34px; border-radius: 50%; background: var(--c); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .pin.dim { opacity: .55; border-style: dashed; }
+    .leaflet-popup-content { font-family: inherit; font-size: 14px; line-height: 1.6; margin: 10px 14px; }
+    .pop-road { font-weight: 700; font-size: 15px; }
+    .pop-link { color: #1d4ed8; cursor: pointer; text-decoration: underline; background: none; border: none; font: inherit; padding: 0; margin-top: 4px; }
+
+    .section-title { font-size: 15px; font-weight: 700; color: #1d3557; margin: 4px 2px 10px; }
+    .card { background: #fff; border-radius: 12px; border: 1px solid #e2e5ea; border-left: 6px solid var(--c); margin-bottom: 10px; overflow: hidden; scroll-margin-top: 12px; }
+    .card.flash { animation: flash 1.2s; }
+    @keyframes flash { 0%{box-shadow:0 0 0 4px #7fb3ff} 100%{box-shadow:none} }
+    .card > summary { list-style: none; cursor: pointer; padding: 12px 40px 10px 0; position: relative; }
+    .card > summary::-webkit-details-marker { display: none; }
+    .card > summary::after { content: "▼ 詳細"; position: absolute; right: 12px; top: 13px; font-size: 12px; color: #1d3557; font-weight: 700; }
+    .card[open] > summary::after { content: "▲ 閉じる"; }
+    .card > summary:focus-visible { outline: 3px solid #7fb3ff; outline-offset: -3px; }
+    .card-head { padding: 0 14px 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .card-when { font-size: 14px; color: #333; padding: 2px 14px 0; }
+    .card-when b { color: var(--c); }
+    .card-body { border-top: 1px solid #eef0f3; padding-top: 10px; }
+    .days-label { font-size: 13px; color: #888; padding: 0 14px 6px; }
+    .days { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 5px; padding: 0 14px 12px; }
+    .day { border-radius: 8px; padding: 5px 2px; text-align: center; font-size: 12px; line-height: 1.35; border: 1px solid transparent; }
+    .day .dd { font-size: 14px; font-weight: 700; }
+    .day.work { background: color-mix(in srgb, var(--c) 14%, #fff); color: #222; }
+    .day.work .dw { color: var(--c); font-weight: 700; }
+    .day.nowork { background: #f1f3f6; color: #777; }
+    .day.past { opacity: .45; }
+    .day.today { border: 2px solid #1d3557; opacity: 1; }
+    .day .sun { color: #c1121f; } .day .sat { color: #1d4ed8; }
+    .ended-box { margin-top: 18px; }
+    .ended-box > summary { cursor: pointer; font-size: 14px; color: #555; padding: 6px 2px; }
+    .card.ended { --c: #9aa5b1 !important; }
+    .badge { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+    .st-active  { background: #ffe0e0; color: #8a0f18; }
+    .st-off     { background: #eceff3; color: #44505c; }
+    .st-planned { background: #e0ebff; color: #1d3a7a; }
+    .st-ended   { background: #eee; color: #777; }
+    .type-tag { font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 20px; color: #fff; background: var(--c); }
+    .card-road { font-size: 17px; font-weight: 700; padding: 2px 14px 0; }
+    .card-place { font-size: 15px; color: #444; padding: 0 14px 8px; }
+    .rows { padding: 0 14px 10px; }
+    .row { display: flex; gap: 10px; font-size: 15px; margin-bottom: 4px; line-height: 1.6; }
+    .row .k { color: #888; width: 5.5em; flex-shrink: 0; }
+    .row .v { white-space: pre-wrap; word-break: break-word; }
+    .row a { color: #1d4ed8; }
+    .card-foot { display: flex; border-top: 1px solid #eef0f3; }
+    .card-foot button { flex: 1; padding: 10px; background: #f8f9fb; border: none; font-size: 15px; color: #1d3557; font-weight: 600; cursor: pointer; font-family: inherit; }
+    .card-foot button:hover { background: #eef2f8; }
+    .empty { background: #fff; border-radius: 12px; border: 1px dashed #c8ced6; padding: 22px; text-align: center; color: #555; font-size: 15px; }
+
+    .notes { font-size: 14px; color: #555; background: #fff; border-radius: 12px; border: 1px solid #e2e5ea; padding: 12px 14px; line-height: 1.7; margin-top: 18px; }
+    .notes li { margin-left: 1.2em; }
+    .notes a { color: #1d4ed8; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🚧 読谷村 道路工事・交通規制マップ</h1>
+  <p>村内の道路工事の場所と日程を地図で確認できます</p>
+</header>
+<div class="realtime-bar"><span class="dot"></span>リアルタイムで自動更新されます<span id="last-updated"></span></div>
+<div class="demo-bar" id="demo-bar" style="display:none;">デモモードで表示中です（公式HP掲載の工事情報〔10月9日更新分〕を入れています。位置はおおよそです）</div>
+
+<main class="app">
+  <div class="summary">
+    <div class="sum-box sum-active"><div class="sum-num" id="n-active">-</div><div class="sum-label">本日 規制あり</div></div>
+    <div class="sum-box sum-planned"><div class="sum-num" id="n-planned">-</div><div class="sum-label">今後の予定・期間中</div></div>
+  </div>
+
+  <div class="chips" role="group" aria-label="表示の絞り込み">
+    <button class="chip on" data-f="all">すべて</button>
+    <button class="chip" data-f="active">本日 規制あり</button>
+    <button class="chip" data-f="upcoming">今後の予定</button>
+  </div>
+
+  <div id="map" aria-label="道路工事の地図"></div>
+  <div class="legend" id="legend"></div>
+
+  <h2 class="section-title">工事の一覧</h2>
+  <div id="list"><div class="empty">読み込み中です…</div></div>
+
+  <div class="notes">
+    <ul>
+      <li>工事の都合や天候により、日程が変更になる場合があります。</li>
+      <li>現地では、標識や交通誘導員の指示に従ってください。</li>
+      <li>国道・県道の規制情報は、各道路管理者の情報もあわせてご確認ください。</li>
+      <li>お問い合わせ：<span id="contact"></span>（各工事の連絡先は一覧に記載）</li>
+      <li><a id="official-link" href="#" target="_blank" rel="noopener">読谷村公式ホームページ</a></li>
+    </ul>
+  </div>
+</main>
+
+<script type="module">
+  const C = window.RW_CONFIG, R = window.RW;
+  let works = {};
+  let filter = "all";
+  const layers = {};
+
+  document.getElementById("contact").textContent = C.contactText;
+  document.getElementById("official-link").href = C.officialUrl;
+
+  // ── 地図 ──
+  const map = L.map("map", { scrollWheelZoom: false }).setView(C.center, C.zoom);
+  L.tileLayer(R.TILE_URL, { attribution: R.TILE_ATTR, maxZoom: 18 }).addTo(map);
+  map.on("focus", () => map.scrollWheelZoom.enable());
+
+  // 凡例
+  document.getElementById("legend").innerHTML =
+    Object.values(R.TYPES).map(t => `<span><i class="sw" style="background:${t.color}"></i>${t.label}</span>`).join("") +
+    `<span><i class="sw dash"></i>点線・薄色＝本日は規制なし（予定・休工日）</span>`;
+
+  // ── 描画 ──
+  function visible(w, today) {
+    if (w.published === false) return false;
+    const s = R.statusOf(w, today);
+    if (s === "ended") return false;
+    if (filter === "active") return s === "active";
+    if (filter === "upcoming") return s === "planned" || s === "off";
+    return true;
+  }
+
+  function popupHtml(id, w, s) {
+    const t = R.TYPES[w.type] || R.TYPES.other;
+    return `<div class="pop-road">${R.esc(w.road)}</div>
+      <div>${R.esc(w.place)}</div>
+      <div><b style="color:${t.color}">${t.label}</b>／${R.STATUS[s].label}</div>
+      <div>${R.esc(R.periodText(w))}</div>
+      <button class="pop-link" onclick="showCard('${id}')">詳しく見る</button>`;
+  }
+
+  function render() {
+    const today = R.todayJST();
+    const all = Object.entries(works).map(([id, w]) => ({ id, ...w }));
+    const pub = all.filter(w => w.published !== false);
+    document.getElementById("n-active").textContent = pub.filter(w => R.statusOf(w, today) === "active").length;
+    document.getElementById("n-planned").textContent = pub.filter(w => ["planned", "off"].includes(R.statusOf(w, today))).length;
+
+    const latest = all.map(w => w.updatedAt).filter(Boolean).sort().pop();
+    document.getElementById("last-updated").textContent = latest ? `（最終更新：${R.fmtDateTime(latest)}）` : "";
+
+    // 地図
+    Object.values(layers).forEach(l => map.removeLayer(l));
+    for (const k in layers) delete layers[k];
+    const shown = R.sortWorks(all.filter(w => visible(w, today)), today);
+    const bounds = [];
+    shown.forEach(w => {
+      const s = R.statusOf(w, today);
+      const t = R.TYPES[w.type] || R.TYPES.other;
+      const dim = s !== "active";
+      const pts = R.geomLatLngs(w.geom);
+      if (!pts.length) return;
+      let layer;
+      if (w.geom.kind === "line" && pts.length > 1) {
+        const line = L.polyline(pts, { color: t.color, weight: 8, opacity: dim ? .5 : .9, dashArray: dim ? "8 8" : null });
+        const outline = L.polyline(pts, { color: "#fff", weight: 12, opacity: .8 });
+        const mid = pts[Math.floor(pts.length / 2)];
+        const icon = L.marker(mid, { icon: pinIcon(t, dim), title: w.road });
+        layer = L.featureGroup([outline, line, icon]);
+      } else {
+        layer = L.marker(pts[0], { icon: pinIcon(t, dim), title: w.road });
+      }
+      layer.bindPopup(popupHtml(w.id, w, s));
+      layer.addTo(map);
+      layers[w.id] = layer;
+      bounds.push(...pts);
+    });
+    if (!render.fitted && bounds.length) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+      render.fitted = true;
+    }
+
+    // 一覧
+    const list = document.getElementById("list");
+    let html = shown.length ? shown.map(w => cardHtml(w, today)).join("")
+      : `<div class="empty">${filter === "all" ? "現在、掲載中の道路工事はありません。" : "該当する工事はありません。"}</div>`;
+    // 直近7日以内に終了した工事（折りたたみ）
+    const weekAgo = R.addDays(today, -7);
+    const recent = pub.filter(w => R.statusOf(w, today) === "ended" && w.end >= weekAgo).sort((a, b) => b.end.localeCompare(a.end));
+    if (recent.length && filter === "all") {
+      html += `<details class="ended-box"><summary>最近終了した工事（${recent.length}件・7日以内）</summary>${recent.map(w => cardHtml(w, today)).join("")}</details>`;
+    }
+    endedWorks = Object.fromEntries(recent.map(w => [w.id, w]));
+    list.innerHTML = html;
+  }
+  let endedWorks = {}, tempLayer = null;
+
+  function pinIcon(t, dim) {
+    return L.divIcon({ className: "", iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16],
+      html: `<div class="pin${dim ? " dim" : ""}" style="--c:${t.color}">${t.icon}</div>` });
+  }
+
+  function row(k, v, html) {
+    if (!v) return "";
+    return `<div class="row"><span class="k">${k}</span><span class="v">${html ? v : R.esc(v)}</span></div>`;
+  }
+
+  // 一覧の1行目に出す「いつ」の要約
+  function whenText(w, s, today) {
+    const time = R.timeText(w) ? `（${R.timeText(w)}）` : "";
+    if (s === "active") return `<b>本日 ${R.TYPES[w.type]?.short || ""}</b>${time}　期間：${R.esc(R.periodText(w))}`;
+    if (s === "off") { const n = R.workDays(w, today, 1)[0]; return `次の施工日：<b>${n ? R.fmtD(n) : "なし"}</b>　期間：${R.esc(R.periodText(w))}`; }
+    if (s === "planned") return `<b>${R.fmtD(w.start)} から</b>${time}　期間：${R.esc(R.periodText(w))}`;
+    return `${R.esc(R.periodText(w))}（終了）`;
+  }
+
+  function daysHtml(w, today) {
+    const { rows, more } = R.dayRows(w, today);
+    if (!rows.length) return "";
+    const DOW = ["日", "月", "火", "水", "木", "金", "土"];
+    const cells = rows.map(r => {
+      const dt = new Date(r.date + "T00:00:00+09:00"), dw = dt.getDay();
+      const cls = ["day", r.work ? "work" : "nowork", r.past ? "past" : "", r.today ? "today" : ""].join(" ");
+      return `<div class="${cls}"><div class="dd">${dt.getMonth() + 1}/${dt.getDate()}</div>
+        <div class="${dw === 0 ? "sun" : dw === 6 ? "sat" : ""}">${DOW[dw]}${r.today ? "・今日" : ""}</div>
+        <div class="dw">${r.work ? "施工" : "なし"}</div></div>`;
+    }).join("");
+    return `<div class="days-label">日別の予定${more ? "（14日分）" : ""}</div><div class="days" role="list" aria-label="日別の施工予定">${cells}</div>`;
+  }
+
+  function cardHtml(w, today) {
+    const s = R.statusOf(w, today);
+    const t = R.TYPES[w.type] || R.TYPES.other;
+    return `<details class="card${s === "ended" ? " ended" : ""}" id="card-${w.id}" style="--c:${t.color}">
+      <summary>
+        <div class="card-head"><span class="badge ${R.STATUS[s].cls}">${R.STATUS[s].label}</span><span class="type-tag">${t.label}</span></div>
+        <div class="card-road">${R.esc(w.road)}</div>
+        <div class="card-place" style="padding-bottom:2px;">📍 ${R.esc(w.place)}</div>
+        <div class="card-when">${whenText(w, s, today)}</div>
+      </summary>
+      <div class="card-body">
+        ${daysHtml(w, today)}
+        <div class="rows">
+          ${row("時間", R.timeText(w))}
+          ${row("迂回路", w.detour)}
+          ${row("備考", w.note)}
+          ${row("工事名", w.title)}
+          ${row("発注者", [w.orderer, w.dept && w.orderer !== w.dept ? "（担当：" + w.dept + "）" : ""].join(""))}
+          ${row("施工業者", w.contractor)}
+          ${row("連絡先", w.contact ? R.telLink(w.contact) : "", true)}
+        </div>
+        <div class="card-foot"><button onclick="focusWork('${w.id}')">🗺️ 地図で見る</button></div>
+      </div>
+    </details>`;
+  }
+
+  window.focusWork = (id) => {
+    if (tempLayer) { map.removeLayer(tempLayer); tempLayer = null; }
+    if (!layers[id] && endedWorks[id]) {
+      // 終了した工事は一時的に灰色で表示
+      const w = endedWorks[id], pts = R.geomLatLngs(w.geom);
+      const g = { color: "#9aa5b1", icon: "✓" };
+      tempLayer = (w.geom.kind === "line" && pts.length > 1)
+        ? L.featureGroup([L.polyline(pts, { color: g.color, weight: 8, dashArray: "8 8" }), L.marker(pts[Math.floor(pts.length / 2)], { icon: pinIcon(g, true) })])
+        : L.featureGroup([L.marker(pts[0], { icon: pinIcon(g, true) })]);
+      tempLayer.bindPopup(popupHtml(id, w, "ended")).addTo(map);
+      layers.__temp = tempLayer;
+      return focusLayer(tempLayer);
+    }
+    focusLayer(layers[id]);
+  };
+  function focusLayer(l) {
+    if (!l) return;
+    const b = l.getBounds ? l.getBounds() : L.latLngBounds([l.getLatLng()]);
+    map.fitBounds(b, { padding: [60, 60], maxZoom: 17 });
+    l.openPopup();
+    document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+  window.showCard = (id) => {
+    const el = document.getElementById("card-" + id); if (!el) return;
+    el.open = true;
+    if (el.parentElement.tagName === "DETAILS") el.parentElement.open = true;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  };
+
+  document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => {
+    filter = b.dataset.f;
+    document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b));
+    render.fitted = false;
+    render();
+  }));
+
+  // 日付が変わったときのために10分ごとに再描画
+  setInterval(render, 10 * 60 * 1000);
+
+  // ── データ取得 ──
+  if (C.demo) {
+    document.getElementById("demo-bar").style.display = "block";
+    const load = () => {
+      try { works = JSON.parse(localStorage.getItem("rw_demo_works")) || window.RW_DEMO.works; }
+      catch (e) { works = window.RW_DEMO.works; }
+      render();
+    };
+    window.addEventListener("storage", e => { if (e.key === "rw_demo_works") load(); });
+    load();
+  } else {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+    const { getDatabase, ref, onValue } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+    const db = getDatabase(initializeApp(C.firebaseConfig));
+    onValue(ref(db, "roadworks/works"), snap => { works = snap.val() || {}; render(); },
+      err => { document.getElementById("list").innerHTML = '<div class="empty">情報を読み込めませんでした。時間をおいて再度お試しください。</div>'; console.warn(err); });
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>道路工事マップ 管理画面</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script src="demo-data.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "Hiragino Sans", "Meiryo", sans-serif; background: #eef1f5; color: #1a1a1a; min-height: 100vh; }
+    header { background: #14253d; color: #fff; padding: 12px 18px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    header h1 { font-size: 17px; font-weight: 700; flex: 1; }
+    .who { font-size: 13px; background: rgba(255,255,255,.15); padding: 4px 10px; border-radius: 20px; }
+    .hbtn { font-size: 13px; color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.5); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-family: inherit; }
+    .demo-bar { background: #fff3c4; color: #6b4f00; font-size: 13px; text-align: center; padding: 6px 12px; }
+    .app { max-width: 640px; margin: 0 auto; padding: 16px; }
+
+    .box { background: #fff; border: 1px solid #d8dde4; border-radius: 14px; padding: 18px 16px; margin-bottom: 14px; }
+    .box-title { font-size: 16px; font-weight: 700; color: #1d3557; margin-bottom: 12px; }
+    label.lb { display: block; font-size: 14px; color: #555; margin: 2px 0 6px; font-weight: 600; }
+    .req { color: #c1121f; font-size: 12px; margin-left: 4px; }
+    .opt { color: #999; font-size: 12px; font-weight: 400; margin-left: 4px; }
+    .hint { font-size: 13px; color: #666; margin: -6px 0 12px; line-height: 1.5; }
+    input[type=text], input[type=email], input[type=password], input[type=date], input[type=time], select, textarea {
+      width: 100%; padding: 10px 12px; font-size: 16px; border: 1px solid #c8ced6; border-radius: 8px; background: #fafbfc; font-family: inherit; margin-bottom: 12px; color: #1a1a1a; }
+    textarea { min-height: 64px; resize: vertical; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #1d3557; background: #fff; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    .btn { display: inline-block; padding: 12px 16px; border: none; border-radius: 8px; background: #1d3557; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .btn:disabled { background: #9aa5b1; cursor: not-allowed; }
+    .btn.full { width: 100%; }
+    .btn.sub { background: #fff; color: #1d3557; border: 1px solid #1d3557; }
+    .btn.danger { background: #fff; color: #c1121f; border: 1px solid #f0a8ae; }
+    .btn.sm { padding: 6px 12px; font-size: 14px; font-weight: 600; }
+    .link { background: none; border: none; color: #1d4ed8; text-decoration: underline; cursor: pointer; font: inherit; font-size: 14px; }
+    .err { font-size: 14px; color: #8a0f18; background: #fff0f0; border: 1px solid #f4b0b0; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+
+    .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .tab { flex: 1; padding: 10px; border: 1px solid #c8ced6; background: #fff; border-radius: 10px; font-size: 15px; cursor: pointer; font-family: inherit; }
+    .tab.on { background: #1d3557; color: #fff; border-color: #1d3557; font-weight: 700; }
+    .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .toolbar .sp { flex: 1; }
+    .check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: #444; cursor: pointer; }
+    .check input { width: 18px; height: 18px; }
+
+    .item { background: #fff; border: 1px solid #d8dde4; border-left: 6px solid var(--c); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+    .item-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 4px; }
+    .badge { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 20px; }
+    .st-active  { background: #ffe0e0; color: #8a0f18; }
+    .st-off     { background: #eceff3; color: #44505c; }
+    .st-planned { background: #e0ebff; color: #1d3a7a; }
+    .st-ended   { background: #eee; color: #777; }
+    .b-draft    { background: #fff3c4; color: #6b4f00; }
+    .b-dept     { background: #f1f3f6; color: #444; }
+    .item-road { font-size: 16px; font-weight: 700; }
+    .item-sub { font-size: 14px; color: #555; line-height: 1.6; }
+    .item-meta { font-size: 12px; color: #888; margin-top: 4px; }
+    .item-btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    details.ended summary { cursor: pointer; font-size: 14px; color: #555; margin: 8px 2px 10px; }
+    .empty { background: #fff; border: 1px dashed #c8ced6; border-radius: 12px; padding: 20px; text-align: center; color: #666; font-size: 15px; }
+
+    /* 編集フォーム */
+    .types { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .type-btn { padding: 12px 6px; border: 2px solid #d8dde4; border-radius: 10px; background: #fff; font-size: 15px; cursor: pointer; font-family: inherit; }
+    .type-btn.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, #fff); font-weight: 700; color: var(--c); }
+    .modes { display: flex; gap: 8px; margin-bottom: 8px; }
+    .mode-btn { flex: 1; padding: 10px 6px; border: 1px solid #c8ced6; border-radius: 8px; background: #fff; font-size: 15px; cursor: pointer; font-family: inherit; }
+    .mode-btn.on { background: #1d3557; color: #fff; border-color: #1d3557; font-weight: 700; }
+    #edit-map { height: 360px; border-radius: 10px; border: 1px solid #c8ced6; margin-bottom: 8px; z-index: 0; cursor: crosshair; }
+    .map-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+    .geo-status { font-size: 14px; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; }
+    .geo-ok { background: #e3f4e8; color: #1b5e2b; }
+    .geo-ng { background: #fff0f0; color: #8a0f18; }
+    .search-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .search-row input { margin-bottom: 0; }
+    .search-row .btn { white-space: nowrap; flex-shrink: 0; }
+    .search-results { margin-bottom: 8px; }
+    .search-results button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #e2e5ea; background: #fff; font-size: 14px; cursor: pointer; font-family: inherit; border-radius: 6px; margin-bottom: 4px; }
+    .vx { width: 14px; height: 14px; background: #fff; border: 3px solid #1d3557; border-radius: 50%; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .dchip { background: #eef1f5; border-radius: 20px; padding: 4px 6px 4px 12px; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+    .dchip button { border: none; background: #c8ced6; color: #fff; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 20px; }
+    .preview { background: #f4f7fb; border: 1px solid #d8e2ef; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.6; color: #1d3557; margin-bottom: 12px; }
+    .pin { width: 30px; height: 30px; border-radius: 50%; background: var(--c); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+    .sticky-save { position: sticky; bottom: 0; background: linear-gradient(transparent, #eef1f5 30%); padding: 18px 0 12px; display: flex; gap: 8px; }
+    .sticky-save { pointer-events: none; }
+    .sticky-save .btn { flex: 1; pointer-events: auto; }
+
+    .hist { background: #fff; border: 1px solid #d8dde4; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; font-size: 14px; line-height: 1.6; }
+    .hist-act { font-weight: 700; }
+    .a-create { color: #1b5e2b; } .a-update { color: #1d3557; } .a-delete { color: #8a0f18; }
+    .hist-ch { color: #666; font-size: 13px; }
+
+    .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #14253d; color: #fff; font-size: 15px; padding: 12px 22px; border-radius: 24px; opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 9999; max-width: 90vw; text-align: center; }
+    .toast.show { opacity: 1; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🚧 道路工事マップ 管理画面</h1>
+  <span class="who" id="who" hidden></span>
+  <button class="hbtn" id="logout-btn" hidden>ログアウト</button>
+</header>
+<div class="demo-bar" id="demo-bar" hidden>デモモード：データはこのブラウザ内にのみ保存されます（<a href="index.html" target="_blank">公開ページを別タブで開く</a>と、保存した内容がすぐ反映されます）</div>
+
+<div class="app">
+
+  <!-- ログイン -->
+  <section id="v-login" hidden>
+    <div class="box">
+      <div class="box-title">担当職員ログイン</div>
+      <div id="login-real">
+        <label class="lb" for="email">メールアドレス</label>
+        <input type="email" id="email" autocomplete="username" />
+        <label class="lb" for="pw">パスワード</label>
+        <input type="password" id="pw" autocomplete="current-password" />
+        <div class="err" id="login-err" hidden></div>
+        <button class="btn full" id="login-btn">ログイン</button>
+        <p style="margin-top:12px;text-align:center;"><button class="link" id="reset-btn">パスワードを忘れた場合</button></p>
+      </div>
+      <div id="login-demo" hidden>
+        <p class="hint" style="margin:0 0 12px;">デモ用の担当者を選んでください（本番では各職員のメールアドレスとパスワードでログインします）。</p>
+        <div id="demo-users"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 一覧・履歴 -->
+  <section id="v-main" hidden>
+    <div class="tabs">
+      <button class="tab on" data-tab="list">工事一覧</button>
+      <button class="tab" data-tab="hist">更新履歴</button>
+    </div>
+    <div id="t-list">
+      <button class="btn full" id="new-btn" style="margin-bottom:12px;">＋ 新しい工事を登録する</button>
+      <div class="toolbar">
+        <label class="check"><input type="checkbox" id="mine-only" checked /> 自分の課の工事だけ表示</label>
+      </div>
+      <div id="list"></div>
+    </div>
+    <div id="t-hist" hidden>
+      <p class="hint" style="margin:0 0 10px;">直近100件の登録・更新・削除の記録です。記録は削除・変更できません。</p>
+      <div id="hist"></div>
+    </div>
+  </section>
+
+  <!-- 編集 -->
+  <section id="v-edit" hidden>
+    <div class="box">
+      <div class="box-title" id="edit-title">工事を登録</div>
+
+      <label class="lb">規制の種類<span class="req">必須</span></label>
+      <div class="types" id="types"></div>
+
+      <label class="lb" for="f-road">路線名<span class="req">必須</span></label>
+      <input type="text" id="f-road" placeholder="例：村道比謝牧原線" />
+      <label class="lb" for="f-place">施工箇所（目印）<span class="req">必須</span></label>
+      <input type="text" id="f-place" placeholder="例：読谷村字ときわ（ローソン読谷大湾店 南側）" />
+      <p class="hint">住民の方が場所をイメージしやすい目印を書いてください。</p>
+    </div>
+
+    <div class="box">
+      <div class="box-title">場所を地図で指定<span class="req">必須</span></div>
+      <div class="modes">
+        <button class="mode-btn on" data-mode="point">📍 地点（ピン）</button>
+        <button class="mode-btn" data-mode="line">〰 区間（線）</button>
+      </div>
+      <p class="hint" id="mode-hint" style="margin:4px 0 8px;"></p>
+      <div class="search-row">
+        <input type="text" id="search-q" placeholder="地名で地図を移動（例：伊良皆、座喜味）" />
+        <button class="btn sm sub" id="search-btn">移動</button>
+      </div>
+      <div class="search-results" id="search-results"></div>
+      <div id="edit-map"></div>
+      <div class="map-tools">
+        <button class="btn sm sub" id="undo-btn">1つ戻す</button>
+        <button class="btn sm danger" id="clear-btn">やり直す</button>
+        <button class="btn sm sub" id="fit-btn">指定した場所を表示</button>
+      </div>
+      <div class="geo-status geo-ng" id="geo-status"></div>
+    </div>
+
+    <div class="box">
+      <div class="box-title">日程</div>
+      <div class="grid2">
+        <div><label class="lb" for="f-start">開始日<span class="req">必須</span></label><input type="date" id="f-start" /></div>
+        <div><label class="lb" for="f-end">終了日<span class="req">必須</span></label><input type="date" id="f-end" /></div>
+        <div><label class="lb" for="f-tfrom">時間（から）<span class="opt">任意</span></label><input type="time" id="f-tfrom" step="300" /></div>
+        <div><label class="lb" for="f-tto">時間（まで）<span class="opt">任意</span></label><input type="time" id="f-tto" step="300" /></div>
+      </div>
+      <label class="check" style="margin-bottom:12px;"><input type="checkbox" id="f-weekends" /> 土日は施工しない</label>
+      <label class="lb" for="f-skip">施工しない日を追加<span class="opt">任意</span></label>
+      <div class="search-row"><input type="date" id="f-skip" /><button class="btn sm sub" id="skip-add">追加</button></div>
+      <div class="chips" id="skip-chips" style="margin-top:8px;"></div>
+      <div class="preview" id="preview"></div>
+      <p class="hint" style="margin:0;">期間・施工日をもとに、公開ページの「本日 規制あり」「予定」「終了」は自動で切り替わります。終了日を過ぎると公開ページから自動で消えます。</p>
+    </div>
+
+    <div class="box">
+      <div class="box-title">発注者・連絡先など</div>
+      <div class="grid2">
+        <div><label class="lb" for="f-dept">担当課</label><select id="f-dept"></select></div>
+        <div><label class="lb" for="f-orderer">発注者</label><select id="f-orderer"></select></div>
+      </div>
+      <label class="lb" for="f-title">工事名<span class="opt">任意</span></label>
+      <input type="text" id="f-title" placeholder="例：配水管布設替工事" />
+      <label class="lb" for="f-contractor">施工業者<span class="opt">任意</span></label>
+      <input type="text" id="f-contractor" placeholder="例：有限会社〇〇" />
+      <label class="lb" for="f-contact">連絡先<span class="opt">任意</span></label>
+      <textarea id="f-contact" placeholder="例：098-000-0000（担当：〇〇）"></textarea>
+      <label class="lb" for="f-detour">迂回路<span class="opt">任意</span></label>
+      <textarea id="f-detour" placeholder="例：村道〇〇線をご利用ください"></textarea>
+      <label class="lb" for="f-note">備考<span class="opt">任意</span></label>
+      <textarea id="f-note" placeholder="例：通行止めのため混雑が予想されます。"></textarea>
+      <label class="check"><input type="checkbox" id="f-published" checked /> 公開ページに掲載する（チェックを外すと下書き）</label>
+    </div>
+
+    <div class="err" id="edit-err" hidden></div>
+    <div class="sticky-save">
+      <button class="btn sub" id="cancel-btn">戻る</button>
+      <button class="btn" id="save-btn">保存して公開</button>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  const C = window.RW_CONFIG, R = window.RW;
+  const $ = id => document.getElementById(id);
+  const show = (id, on) => { $(id).hidden = !on; };
+
+  const FIELD_LABELS = { type: "規制の種類", road: "路線名", place: "施工箇所", geom: "地図上の場所", start: "開始日", end: "終了日",
+    timeFrom: "時間（から）", timeTo: "時間（まで）", weekendsOff: "土日の扱い", skipDates: "施工しない日", dept: "担当課",
+    orderer: "発注者", title: "工事名", contractor: "施工業者", contact: "連絡先", detour: "迂回路", note: "備考", published: "公開設定" };
+
+  // ════════ データ層（デモ / Firebase） ════════
+  let store;
+  if (C.demo) {
+    store = {
+      user: null,
+      async init(onUser) {
+        show("demo-bar", true); show("login-real", false); show("login-demo", true);
+        $("demo-users").innerHTML = window.RW_DEMO.users.map(u =>
+          `<button class="btn sub full" style="margin-bottom:8px;" data-uid="${u.uid}">${R.esc(u.name)}</button>`).join("");
+        $("demo-users").onclick = e => {
+          const uid = e.target.dataset.uid; if (!uid) return;
+          this.user = window.RW_DEMO.users.find(u => u.uid === uid);
+          try { sessionStorage.setItem("rw_demo_uid", uid); } catch (e) {}
+          onUser(this.user);
+        };
+        let uid = null; try { uid = sessionStorage.getItem("rw_demo_uid"); } catch (e) {}
+        this.user = window.RW_DEMO.users.find(u => u.uid === uid) || null;
+        onUser(this.user);
+      },
+      async logout() { try { sessionStorage.removeItem("rw_demo_uid"); } catch (e) {} this.user = null; },
+      _get(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } },
+      _put(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+      subscribeWorks(cb) { this._wcb = cb; cb(this._get("rw_demo_works", structuredClone(window.RW_DEMO.works))); },
+      subscribeHistory(cb) { this._hcb = cb; cb(this._get("rw_demo_history", [])); },
+      newId() { return "w" + Date.now().toString(36); },
+      async commit(id, data, hist) {
+        const works = this._get("rw_demo_works", structuredClone(window.RW_DEMO.works));
+        if (data) works[id] = data; else delete works[id];
+        const h = this._get("rw_demo_history", []); h.unshift(hist);
+        this._put("rw_demo_works", works); this._put("rw_demo_history", h.slice(0, 100));
+        this._wcb && this._wcb(works); this._hcb && this._hcb(h);
+      }
+    };
+  } else {
+    const fa = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+    const fu = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
+    const fd = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+    const app = fa.initializeApp(C.firebaseConfig);
+    const auth = fu.getAuth(app), db = fd.getDatabase(app);
+    store = {
+      user: null,
+      async init(onUser) {
+        fu.onAuthStateChanged(auth, async u => {
+          if (!u) { this.user = null; onUser(null); return; }
+          try {
+            const snap = await fd.get(fd.ref(db, "roadworks/users/" + u.uid));
+            if (!snap.exists()) throw new Error("not-registered");
+            this.user = { uid: u.uid, email: u.email, ...snap.val() };
+            onUser(this.user);
+          } catch (e) {
+            await fu.signOut(auth);
+            loginError("このアカウントは担当職員として登録されていません。デジタル社会推進課へご連絡ください。");
+          }
+        });
+      },
+      async login(email, pw) { await fu.signInWithEmailAndPassword(auth, email, pw); },
+      async reset(email) { await fu.sendPasswordResetEmail(auth, email); },
+      async logout() { await fu.signOut(auth); },
+      subscribeWorks(cb) { fd.onValue(fd.ref(db, "roadworks/works"), s => cb(s.val() || {})); },
+      subscribeHistory(cb) {
+        fd.onValue(fd.query(fd.ref(db, "roadworks/history"), fd.orderByChild("at"), fd.limitToLast(100)), s => {
+          const arr = []; s.forEach(c => { arr.push(c.val()); }); cb(arr.reverse());
+        });
+      },
+      newId() { return fd.push(fd.ref(db, "roadworks/works")).key; },
+      async commit(id, data, hist) {
+        const hid = fd.push(fd.ref(db, "roadworks/history")).key;
+        // 工事データと履歴を同時に書き込む（片方だけ失敗することはない）
+        await fd.update(fd.ref(db, "roadworks"), { ["works/" + id]: data || null, ["history/" + hid]: hist });
+      }
+    };
+    $("login-btn").onclick = async () => {
+      show("login-err", false);
+      const btn = $("login-btn"); btn.disabled = true; btn.textContent = "確認中…";
+      try { await store.login($("email").value.trim(), $("pw").value); }
+      catch (e) { loginError("メールアドレスまたはパスワードが正しくありません。"); }
+      finally { btn.disabled = false; btn.textContent = "ログイン"; }
+    };
+    $("pw").addEventListener("keydown", e => { if (e.key === "Enter") $("login-btn").click(); });
+    $("reset-btn").onclick = async () => {
+      const email = $("email").value.trim();
+      if (!email) { loginError("メールアドレスを入力してから押してください。"); return; }
+      try { await store.reset(email); toast("パスワード再設定のメールを送信しました"); }
+      catch (e) { loginError("送信できませんでした。メールアドレスをご確認ください。"); }
+    };
+  }
+  function loginError(msg) { $("login-err").textContent = msg; show("login-err", true); }
+
+  // ════════ 画面状態 ════════
+  let works = {}, history = [], me = null;
+  const canEdit = w => me && (me.role === "admin" || w.dept === me.dept);
+
+  store.init(u => {
+    me = u;
+    show("v-login", !u); show("v-main", !!u); show("v-edit", false);
+    show("who", !!u); show("logout-btn", !!u);
+    if (u) {
+      $("who").textContent = `${u.name}（${u.dept}）`;
+      if (!store._subscribed) {
+        store.subscribeWorks(w => { works = w; renderList(); });
+        store.subscribeHistory(h => { history = h; renderHist(); });
+        store._subscribed = true;
+      } else renderList();
+    }
+  });
+  $("logout-btn").onclick = async () => { await store.logout(); if (C.demo) location.reload(); };
+
+  document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+    document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+    show("t-list", t.dataset.tab === "list"); show("t-hist", t.dataset.tab === "hist");
+  });
+  $("mine-only").onchange = renderList;
+
+  // ════════ 一覧 ════════
+  function renderList() {
+    if (!me) return;
+    const today = R.todayJST();
+    let arr = Object.entries(works).map(([id, w]) => ({ id, ...w }));
+    if ($("mine-only").checked && me.role !== "admin") arr = arr.filter(w => w.dept === me.dept);
+    R.sortWorks(arr, today);
+    const live = arr.filter(w => R.statusOf(w, today) !== "ended");
+    const ended = arr.filter(w => R.statusOf(w, today) === "ended");
+    let html = live.length ? live.map(w => itemHtml(w, today)).join("") : '<div class="empty">掲載中・予定の工事はありません。</div>';
+    if (ended.length) html += `<details class="ended"><summary>終了した工事（${ended.length}件）</summary>${ended.map(w => itemHtml(w, today)).join("")}</details>`;
+    $("list").innerHTML = html;
+  }
+  function itemHtml(w, today) {
+    const s = R.statusOf(w, today), t = R.TYPES[w.type] || R.TYPES.other, ok = canEdit(w);
+    return `<div class="item" style="--c:${t.color}">
+      <div class="item-top">
+        <span class="badge ${R.STATUS[s].cls}">${R.STATUS[s].label}</span>
+        ${w.published === false ? '<span class="badge b-draft">下書き（非公開）</span>' : ""}
+        <span class="badge b-dept">${R.esc(w.dept)}</span>
+        <span class="badge" style="background:${t.color};color:#fff">${t.short}</span>
+      </div>
+      <div class="item-road">${R.esc(w.road)}</div>
+      <div class="item-sub">📍 ${R.esc(w.place)}<br>📅 ${R.esc(R.periodText(w))}${R.timeText(w) ? "　" + R.esc(R.timeText(w)) : ""}</div>
+      <div class="item-meta">最終更新：${R.esc(R.fmtDateTime(w.updatedAt))}　${R.esc(w.updatedBy || "")}</div>
+      <div class="item-btns">
+        ${ok ? `<button class="btn sm" onclick="editWork('${w.id}')">編集</button>` : `<span class="item-meta">他課の工事のため閲覧のみ</span>`}
+        <button class="btn sm sub" onclick="copyWork('${w.id}')">複製して新規作成</button>
+        ${ok ? `<button class="btn sm danger" onclick="deleteWork('${w.id}')">削除</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  // ════════ 履歴 ════════
+  function renderHist() {
+    const act = { create: ["登録", "a-create"], update: ["更新", "a-update"], delete: ["削除", "a-delete"] };
+    $("hist").innerHTML = history.length ? history.map(h => {
+      const [label, cls] = act[h.action] || [h.action, ""];
+      return `<div class="hist">
+        <div>${R.esc(R.fmtDateTime(h.at))}　${R.esc(h.name)}（${R.esc(h.dept)}）</div>
+        <div><span class="hist-act ${cls}">${label}</span>：${R.esc(h.label)}</div>
+        ${h.changes && h.changes.length ? `<div class="hist-ch">変更した項目：${R.esc(h.changes.join("、"))}</div>` : ""}
+      </div>`;
+    }).join("") : '<div class="empty">まだ記録はありません。</div>';
+  }
+
+  // ════════ 編集フォーム ════════
+  let editingId = null, prevData = null, geom = null, mode = "point", skipDates = [], ftype = "closed";
+  let emap = null, glayer = null;
+
+  $("f-dept").innerHTML = C.depts.map(d => `<option>${R.esc(d)}</option>`).join("");
+  $("f-orderer").innerHTML = C.orderers.map(d => `<option>${R.esc(d)}</option>`).join("");
+  $("types").innerHTML = Object.entries(R.TYPES).map(([k, t]) =>
+    `<button class="type-btn" data-type="${k}" style="--c:${t.color}">${t.icon} ${t.label}</button>`).join("");
+  $("types").onclick = e => { const b = e.target.closest(".type-btn"); if (b) { ftype = b.dataset.type; renderTypes(); drawGeom(); } };
+  function renderTypes() { document.querySelectorAll(".type-btn").forEach(b => b.classList.toggle("on", b.dataset.type === ftype)); }
+
+  function openForm(id, src, isCopy) {
+    editingId = isCopy ? null : id;
+    prevData = isCopy ? null : (src ? structuredClone(src) : null);
+    const w = src || {};
+    $("edit-title").textContent = editingId ? "工事情報を編集" : (isCopy ? "複製して新規登録" : "工事を登録");
+    ftype = w.type || "closed"; renderTypes();
+    $("f-road").value = w.road || ""; $("f-place").value = w.place || "";
+    $("f-start").value = w.start || R.todayJST(); $("f-end").value = w.end || w.start || R.todayJST();
+    $("f-tfrom").value = w.timeFrom || ""; $("f-tto").value = w.timeTo || "";
+    $("f-weekends").checked = !!w.weekendsOff;
+    skipDates = R.skipList(w).slice();
+    $("f-dept").value = w.dept || me.dept; $("f-dept").disabled = me.role !== "admin";
+    $("f-orderer").value = w.orderer || "読谷村";
+    ["title", "contractor", "contact", "detour", "note"].forEach(k => $("f-" + k).value = w[k] || "");
+    $("f-published").checked = w.published !== false;
+    geom = w.geom ? structuredClone(w.geom) : null;
+    if (geom && geom.kind === "line") geom.coords = R.geomLatLngs(geom).map(([lat, lng]) => ({ lat, lng }));
+    setMode(geom ? geom.kind : "point", true);
+    $("search-results").innerHTML = ""; show("edit-err", false);
+
+    show("v-main", false); show("v-edit", true); window.scrollTo(0, 0);
+    if (!emap) {
+      emap = L.map("edit-map").setView(C.center, C.zoom);
+      L.tileLayer(R.TILE_URL, { attribution: R.TILE_ATTR, maxZoom: 18 }).addTo(emap);
+      emap.on("click", onMapClick);
+    }
+    setTimeout(() => { emap.invalidateSize(); drawGeom(); fitGeom(); }, 50);
+    renderSkip(); updateSaveLabel();
+  }
+  window.editWork = id => openForm(id, works[id], false);
+  window.copyWork = id => {
+    const w = structuredClone(works[id]);
+    ["createdAt", "createdBy", "updatedAt", "updatedBy", "createdByUid", "updatedByUid"].forEach(k => delete w[k]);
+    if (me.role !== "admin") w.dept = me.dept;
+    openForm(null, w, true);
+    toast("内容を複製しました。場所や日程を変更して保存してください");
+  };
+  $("new-btn").onclick = () => openForm(null, null, false);
+  $("cancel-btn").onclick = () => { show("v-edit", false); show("v-main", true); };
+  $("f-published").onchange = updateSaveLabel;
+  function updateSaveLabel() { $("save-btn").textContent = $("f-published").checked ? "保存して公開" : "下書きとして保存"; }
+
+  // 地図操作
+  document.querySelectorAll(".mode-btn").forEach(b => b.onclick = () => {
+    if (b.dataset.mode === mode) return;
+    if (geom && !confirm("指定した場所が消えます。切り替えますか？")) return;
+    geom = null; setMode(b.dataset.mode);
+  });
+  function setMode(m, silent) {
+    mode = m;
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+    $("mode-hint").textContent = m === "point"
+      ? "地図上の工事箇所をタップすると、ピンが立ちます。もう一度タップすると位置を移動できます。"
+      : "通行止めなどの区間を、始点から終点まで道路に沿って順にタップしてください（2点以上）。";
+    if (!silent) drawGeom();
+  }
+  function onMapClick(e) {
+    const p = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
+    if (mode === "point") geom = { kind: "point", ...p };
+    else { if (!geom || geom.kind !== "line") geom = { kind: "line", coords: [] }; geom.coords.push(p); }
+    drawGeom();
+  }
+  $("undo-btn").onclick = () => {
+    if (!geom) return;
+    if (geom.kind === "line" && geom.coords.length > 1) geom.coords.pop(); else geom = null;
+    drawGeom();
+  };
+  $("clear-btn").onclick = () => { geom = null; drawGeom(); };
+  $("fit-btn").onclick = fitGeom;
+  function fitGeom() { const pts = R.geomLatLngs(geom); if (pts.length) emap.fitBounds(pts, { padding: [50, 50], maxZoom: 17 }); }
+  function drawGeom() {
+    if (!emap) return;
+    if (glayer) emap.removeLayer(glayer);
+    const t = R.TYPES[ftype], pts = R.geomLatLngs(geom), parts = [];
+    if (geom && geom.kind === "point") {
+      parts.push(L.marker(pts[0], { icon: L.divIcon({ className: "", iconSize: [30, 30], iconAnchor: [15, 15], html: `<div class="pin" style="--c:${t.color}">${t.icon}</div>` }) }));
+    } else if (pts.length) {
+      if (pts.length > 1) parts.push(L.polyline(pts, { color: t.color, weight: 8, opacity: .85 }));
+      pts.forEach(p => parts.push(L.marker(p, { icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="vx"></div>' }) })));
+    }
+    glayer = L.layerGroup(parts).addTo(emap);
+    const st = $("geo-status");
+    const ok = geom && (geom.kind === "point" || geom.coords.length >= 2);
+    st.className = "geo-status " + (ok ? "geo-ok" : "geo-ng");
+    st.textContent = !geom ? "まだ場所が指定されていません。地図をタップしてください。"
+      : geom.kind === "point" ? "✓ 地点を指定しました"
+      : geom.coords.length < 2 ? "区間の終点まで続けてタップしてください（現在1点）"
+      : `✓ 区間を指定しました（${geom.coords.length}点）`;
+  }
+
+  // 地名検索（国土地理院 住所検索）
+  $("search-btn").onclick = searchPlace;
+  $("search-q").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); searchPlace(); } });
+  async function searchPlace() {
+    const q = $("search-q").value.trim(); if (!q) return;
+    const box = $("search-results"); box.textContent = "検索中…";
+    try {
+      const res = await fetch("https://msearch.gsi.go.jp/address-search/AddressSearch?q=" + encodeURIComponent(q.includes("読谷") ? q : "読谷村" + q));
+      const data = (await res.json()).slice(0, 5);
+      if (!data.length) { box.textContent = "見つかりませんでした。地図を直接動かしてください。"; return; }
+      box.innerHTML = data.map((d, i) => `<button data-i="${i}">${R.esc(d.properties.title)}</button>`).join("");
+      box.onclick = e => {
+        const i = e.target.dataset.i; if (i == null) return;
+        const [lng, lat] = data[i].geometry.coordinates;
+        emap.setView([lat, lng], 17); box.innerHTML = "";
+      };
+    } catch (e) { box.textContent = "検索できませんでした。地図を直接動かしてください。"; }
+  }
+
+  // 施工しない日
+  $("skip-add").onclick = () => {
+    const d = $("f-skip").value; if (!d) return;
+    if (!skipDates.includes(d)) skipDates.push(d);
+    skipDates.sort(); $("f-skip").value = ""; renderSkip();
+  };
+  window.rmSkip = d => { skipDates = skipDates.filter(x => x !== d); renderSkip(); };
+  ["f-start", "f-end", "f-weekends"].forEach(id => $(id).addEventListener("change", renderSkip));
+  function renderSkip() {
+    $("skip-chips").innerHTML = skipDates.map(d => `<span class="dchip">${R.fmtShort(d)}<button onclick="rmSkip('${d}')" aria-label="削除">✕</button></span>`).join("");
+    const w = { start: $("f-start").value, end: $("f-end").value, weekendsOff: $("f-weekends").checked, skipDates };
+    if (!w.start || !w.end || w.end < w.start) { $("preview").textContent = "開始日と終了日を正しく入力してください。"; return; }
+    const days = R.workDays(w);
+    $("preview").innerHTML = `<b>施工日（${days.length}日）</b><br>${days.slice(0, 20).map(R.fmtShort).join("、")}${days.length > 20 ? " ほか" : ""}`;
+  }
+
+  // 保存
+  $("save-btn").onclick = async () => {
+    const data = {
+      type: ftype, road: $("f-road").value.trim(), place: $("f-place").value.trim(), geom,
+      start: $("f-start").value, end: $("f-end").value, timeFrom: $("f-tfrom").value, timeTo: $("f-tto").value,
+      weekendsOff: $("f-weekends").checked, skipDates: skipDates.filter(d => d >= $("f-start").value && d <= $("f-end").value),
+      dept: me.role === "admin" ? $("f-dept").value : me.dept, orderer: $("f-orderer").value,
+      title: $("f-title").value.trim(), contractor: $("f-contractor").value.trim(), contact: $("f-contact").value.trim(),
+      detour: $("f-detour").value.trim(), note: $("f-note").value.trim(), published: $("f-published").checked
+    };
+    const errs = [];
+    if (!data.road) errs.push("路線名");
+    if (!data.place) errs.push("施工箇所（目印）");
+    if (!geom || (geom.kind === "line" && geom.coords.length < 2)) errs.push("地図上の場所");
+    if (!data.start || !data.end) errs.push("開始日・終了日");
+    if (errs.length) return editError("次の項目を入力してください：" + errs.join("、"));
+    if (data.end < data.start) return editError("終了日は開始日以降の日付にしてください。");
+    if (!R.workDays(data).length) return editError("施工日が1日もありません。施工しない日の設定をご確認ください。");
+
+    const now = new Date().toISOString();
+    const id = editingId || store.newId();
+    Object.assign(data, {
+      createdAt: prevData?.createdAt || now, createdBy: prevData?.createdBy || me.name, createdByUid: prevData?.createdByUid || me.uid,
+      updatedAt: now, updatedBy: me.name, updatedByUid: me.uid
+    });
+    const changes = prevData ? Object.keys(FIELD_LABELS).filter(k => JSON.stringify(norm(prevData[k])) !== JSON.stringify(norm(data[k]))).map(k => FIELD_LABELS[k]) : [];
+    if (prevData && !changes.length) { toast("変更はありませんでした"); $("cancel-btn").click(); return; }
+    const hist = { at: now, uid: me.uid, name: me.name, dept: me.dept, action: prevData ? "update" : "create",
+      workId: id, label: `${data.road}／${data.place}`, changes };
+
+    const btn = $("save-btn"); btn.disabled = true;
+    try {
+      await store.commit(id, data, hist);
+      toast(data.published ? "保存しました。公開ページに反映されています ✓" : "下書きとして保存しました ✓");
+      show("v-edit", false); show("v-main", true);
+    } catch (e) { console.warn(e); editError("保存できませんでした。権限がないか、通信に問題があります。"); }
+    finally { btn.disabled = false; }
+  };
+  function norm(v) {
+    if (v === undefined || v === null || v === "") return null;
+    if (v && v.kind) return { kind: v.kind, pts: R.geomLatLngs(v) };
+    if (typeof v === "object") return Object.values(v);
+    return v;
+  }
+  function editError(msg) { $("edit-err").textContent = msg; show("edit-err", true); $("edit-err").scrollIntoView({ block: "center" }); }
+
+  window.deleteWork = async id => {
+    const w = works[id];
+    if (!confirm(`「${w.road}／${w.place}」を削除しますか？\n公開ページからも消えます。（削除の記録は履歴に残ります）`)) return;
+    try {
+      await store.commit(id, null, { at: new Date().toISOString(), uid: me.uid, name: me.name, dept: me.dept,
+        action: "delete", workId: id, label: `${w.road}／${w.place}`, changes: [] });
+      toast("削除しました");
+    } catch (e) { toast("削除できませんでした"); }
+  };
+
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 3200); }
+</script>
+</body>
+</html>
