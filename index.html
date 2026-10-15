@@ -46,6 +46,16 @@
     .pop-road { font-weight: 700; font-size: 15px; }
     .pop-link { color: #1d4ed8; cursor: pointer; text-decoration: underline; background: none; border: none; font: inherit; padding: 0; margin-top: 4px; }
 
+    .list-hint { font-size: 13px; color: #666; margin: -6px 2px 10px; }
+    .card.selected { box-shadow: 0 0 0 2px var(--c); }
+    /* パソコンなど横幅が広い画面：一覧を左、地図を右に固定して同時に見られるようにする */
+    @media (min-width: 1000px) {
+      .app { max-width: 1240px; }
+      .layout { display: grid; grid-template-columns: minmax(380px, 460px) 1fr; grid-template-areas: "list map"; gap: 20px; align-items: start; }
+      .map-col { grid-area: map; position: sticky; top: 12px; }
+      .list-col { grid-area: list; }
+      #map { height: calc(100vh - 90px); max-height: none; }
+    }
     .section-title { font-size: 15px; font-weight: 700; color: #1d3557; margin: 4px 2px 10px; }
     .card { background: #fff; border-radius: 12px; border: 1px solid #e2e5ea; border-left: 6px solid var(--c); margin-bottom: 10px; overflow: hidden; scroll-margin-top: 12px; }
     .card.flash { animation: flash 1.2s; }
@@ -115,10 +125,15 @@
     <button class="chip" data-f="upcoming">今後の予定</button>
   </div>
 
-  <div id="map" aria-label="道路工事の地図"></div>
-  <div class="legend" id="legend"></div>
+  <div class="layout">
+  <div class="map-col">
+    <div id="map" aria-label="道路工事の地図"></div>
+    <div class="legend" id="legend"></div>
+  </div>
 
+  <div class="list-col">
   <h2 class="section-title">工事の一覧</h2>
+  <p class="list-hint">工事をタップすると詳しい情報が開き、地図もその場所へ移動します。</p>
   <div id="list"><div class="empty">読み込み中です…</div></div>
 
   <div class="notes">
@@ -130,6 +145,8 @@
       <li><a id="official-link" href="#" target="_blank" rel="noopener">読谷村公式ホームページ</a></li>
     </ul>
   </div>
+  </div><!-- /list-col -->
+  </div><!-- /layout -->
 </main>
 
 <script type="module">
@@ -145,6 +162,7 @@
   const map = L.map("map", { scrollWheelZoom: false }).setView(C.center, C.zoom);
   L.tileLayer(R.TILE_URL, { attribution: R.TILE_ATTR, maxZoom: 18 }).addTo(map);
   map.on("focus", () => map.scrollWheelZoom.enable());
+  window.RW_MAP = map;  // 動作確認用
 
   // 凡例
   document.getElementById("legend").innerHTML =
@@ -219,12 +237,33 @@
     const weekAgo = R.addDays(today, -7);
     const recent = pub.filter(w => R.statusOf(w, today) === "ended" && w.end >= weekAgo).sort((a, b) => b.end.localeCompare(a.end));
     if (recent.length && filter === "all") {
-      html += `<details class="ended-box"><summary>最近終了した工事（${recent.length}件・7日以内）</summary>${recent.map(w => cardHtml(w, today)).join("")}</details>`;
+      html += `<details class="ended-box"${endedOpen ? " open" : ""}><summary>最近終了した工事（${recent.length}件・7日以内）</summary>${recent.map(w => cardHtml(w, today)).join("")}</details>`;
     }
     endedWorks = Object.fromEntries(recent.map(w => [w.id, w]));
+    // 再描画（データ更新・日付変更）しても、開いていた工事は開いたままにする
+    restoring = true;
     list.innerHTML = html;
+    setTimeout(() => { restoring = false; }, 120);
   }
   let endedWorks = {}, tempLayer = null;
+  const openIds = new Set();       // 一覧で開いている工事
+  let endedOpen = false;           // 「最近終了した工事」を開いているか
+  let selectedId = null;           // 地図と連動中の工事
+  let restoring = false;           // 再描画による開閉は地図を動かさない
+  let skipSyncId = null;           // 地図のポップアップから開いた場合は地図を動かさない
+  const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // 一覧の工事を開いたら、地図をその場所へ移動（ページのスクロールはしない）
+  document.getElementById("list").addEventListener("toggle", (e) => {
+    const el = e.target;
+    if (el.classList.contains("ended-box")) { endedOpen = el.open; return; }
+    if (!el.classList.contains("card")) return;
+    const id = el.id.slice(5);
+    if (el.open) openIds.add(id); else openIds.delete(id);
+    if (!el.open || restoring) return;
+    if (skipSyncId === id) { skipSyncId = null; return; }
+    showOnMap(id, false);
+  }, true);
 
   function pinIcon(t, dim) {
     return L.divIcon({ className: "", iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16],
@@ -262,7 +301,7 @@
   function cardHtml(w, today) {
     const s = R.statusOf(w, today);
     const t = R.TYPES[w.type] || R.TYPES.other;
-    return `<details class="card${s === "ended" ? " ended" : ""}" id="card-${w.id}" style="--c:${t.color}">
+    return `<details class="card${s === "ended" ? " ended" : ""}${selectedId === w.id ? " selected" : ""}" id="card-${w.id}" style="--c:${t.color}"${openIds.has(w.id) ? " open" : ""}>
       <summary>
         <div class="card-head"><span class="badge ${R.STATUS[s].cls}">${R.STATUS[s].label}</span><span class="type-tag">${t.label}</span></div>
         <div class="card-road">${R.esc(w.road)}</div>
@@ -285,8 +324,12 @@
     </details>`;
   }
 
-  window.focusWork = (id) => {
-    if (tempLayer) { map.removeLayer(tempLayer); tempLayer = null; }
+  // 「地図で見る」ボタン：地図を移動して、地図までスクロール
+  window.focusWork = (id) => showOnMap(id, true);
+
+  function showOnMap(id, scroll) {
+    selectCard(id);
+    if (tempLayer) { map.removeLayer(tempLayer); tempLayer = null; delete layers.__temp; }
     if (!layers[id] && endedWorks[id]) {
       // 終了した工事は一時的に灰色で表示
       const w = endedWorks[id], pts = R.geomLatLngs(w.geom);
@@ -296,20 +339,32 @@
         : L.featureGroup([L.marker(pts[0], { icon: pinIcon(g, true) })]);
       tempLayer.bindPopup(popupHtml(id, w, "ended")).addTo(map);
       layers.__temp = tempLayer;
-      return focusLayer(tempLayer);
+      return focusLayer(tempLayer, scroll);
     }
-    focusLayer(layers[id]);
-  };
-  function focusLayer(l) {
+    focusLayer(layers[id], scroll);
+  }
+  function focusLayer(l, scroll) {
     if (!l) return;
     const b = l.getBounds ? l.getBounds() : L.latLngBounds([l.getLatLng()]);
-    map.fitBounds(b, { padding: [60, 60], maxZoom: 17 });
-    l.openPopup();
-    document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "center" });
-  };
+    map.closePopup();
+    if (reduceMotion) map.fitBounds(b, { padding: [60, 60], maxZoom: 17, animate: false });
+    else map.flyToBounds(b, { padding: [60, 60], maxZoom: 17, duration: 0.6 });
+    // 移動が終わってからポップアップを開く（移動中に開くと位置がずれるため）
+    // 続けて別の工事を開いた場合は、前の予約を取り消す（前のポップアップが割り込んで位置がずれるのを防ぐ）
+    clearTimeout(focusLayer.timer);
+    focusLayer.timer = setTimeout(() => { if (map.hasLayer(l)) l.openPopup(); }, reduceMotion ? 0 : 700);
+    if (scroll) document.getElementById("map").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+  }
+  function selectCard(id) {
+    selectedId = id;
+    document.querySelectorAll(".card.selected").forEach(c => c.classList.remove("selected"));
+    const el = document.getElementById("card-" + id);
+    if (el) el.classList.add("selected");
+  }
   window.showCard = (id) => {
     const el = document.getElementById("card-" + id); if (!el) return;
-    el.open = true;
+    selectCard(id);
+    if (!el.open) { skipSyncId = id; el.open = true; }
     if (el.parentElement.tagName === "DETAILS") el.parentElement.open = true;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
     el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
@@ -322,8 +377,9 @@
     render();
   }));
 
-  // 日付が変わったときのために10分ごとに再描画
-  setInterval(render, 10 * 60 * 1000);
+  // 日付が変わったときだけ再描画（開いている工事やポップアップを不用意に閉じないため）
+  let lastDay = R.todayJST();
+  setInterval(() => { const d = R.todayJST(); if (d !== lastDay) { lastDay = d; render(); } }, 60 * 1000);
 
   // ── データ取得 ──
   if (C.demo) {
