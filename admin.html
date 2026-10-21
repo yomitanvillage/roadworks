@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>道路工事マップ 管理画面</title>
+  <title>読谷村道路工事マップ 管理画面</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="config.js"></script>
@@ -103,8 +103,9 @@
 </head>
 <body>
 <header>
-  <h1>🚧 道路工事マップ 管理画面</h1>
+  <h1>🚧 読谷村道路工事マップ 管理画面</h1>
   <span class="who" id="who" hidden></span>
+  <button class="hbtn" id="pw-btn" hidden>パスワード変更</button>
   <button class="hbtn" id="logout-btn" hidden>ログアウト</button>
 </header>
 <div class="demo-bar" id="demo-bar" hidden>デモモード：データはこのブラウザ内にのみ保存されます（<a href="index.html" target="_blank">公開ページを別タブで開く</a>と、保存した内容がすぐ反映されます）</div>
@@ -127,6 +128,25 @@
       <div id="login-demo" hidden>
         <p class="hint" style="margin:0 0 12px;">デモ用の担当者を選んでください（本番では各職員のメールアドレスとパスワードでログインします）。</p>
         <div id="demo-users"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- パスワード変更 -->
+  <section id="v-pw" hidden>
+    <div class="box">
+      <div class="box-title">パスワードの変更</div>
+      <p class="hint" style="margin:0 0 12px;">新しいパスワードは8文字以上にしてください。英字と数字を混ぜ、他のサービスと同じものは避けてください。</p>
+      <label class="lb" for="pw-cur">今のパスワード</label>
+      <input type="password" id="pw-cur" autocomplete="current-password" />
+      <label class="lb" for="pw-new">新しいパスワード</label>
+      <input type="password" id="pw-new" autocomplete="new-password" />
+      <label class="lb" for="pw-new2">新しいパスワード（確認のためもう一度）</label>
+      <input type="password" id="pw-new2" autocomplete="new-password" />
+      <div class="err" id="pw-err" hidden></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn sub" id="pw-cancel" style="flex:1;">戻る</button>
+        <button class="btn" id="pw-save" style="flex:1;">変更する</button>
       </div>
     </div>
   </section>
@@ -259,6 +279,7 @@
         onUser(this.user);
       },
       async logout() { try { sessionStorage.removeItem("rw_demo_uid"); } catch (e) {} this.user = null; },
+      async changePassword() { const e = new Error("demo"); e.code = "demo"; throw e; },
       _get(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } },
       _put(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
       subscribeWorks(cb) { this._wcb = cb; cb(this._get("rw_demo_works", structuredClone(window.RW_DEMO.works))); },
@@ -297,6 +318,12 @@
       async login(email, pw) { await fu.signInWithEmailAndPassword(auth, email, pw); },
       async reset(email) { await fu.sendPasswordResetEmail(auth, email); },
       async logout() { await fu.signOut(auth); },
+      // 本人確認（今のパスワード）をしてから新しいパスワードに変更
+      async changePassword(current, next) {
+        const u = auth.currentUser;
+        await fu.reauthenticateWithCredential(u, fu.EmailAuthProvider.credential(u.email, current));
+        await fu.updatePassword(u, next);
+      },
       subscribeWorks(cb) { fd.onValue(fd.ref(db, "roadworks/works"), s => cb(s.val() || {})); },
       subscribeHistory(cb) {
         fd.onValue(fd.query(fd.ref(db, "roadworks/history"), fd.orderByChild("at"), fd.limitToLast(100)), s => {
@@ -334,7 +361,7 @@
   store.init(u => {
     me = u;
     show("v-login", !u); show("v-main", !!u); show("v-edit", false);
-    show("who", !!u); show("logout-btn", !!u);
+    show("who", !!u); show("logout-btn", !!u); show("pw-btn", !!u); show("v-pw", false);
     if (u) {
       $("who").textContent = `${u.name}（${u.dept}）`;
       if (!store._subscribed) {
@@ -345,6 +372,35 @@
     }
   });
   $("logout-btn").onclick = async () => { await store.logout(); if (C.demo) location.reload(); };
+
+  // ════════ パスワード変更 ════════
+  $("pw-btn").onclick = () => {
+    ["pw-cur", "pw-new", "pw-new2"].forEach(id => $(id).value = "");
+    show("pw-err", false); show("v-main", false); show("v-edit", false); show("v-pw", true); window.scrollTo(0, 0);
+  };
+  $("pw-cancel").onclick = () => { show("v-pw", false); show("v-main", true); };
+  $("pw-save").onclick = async () => {
+    const cur = $("pw-cur").value, nw = $("pw-new").value, nw2 = $("pw-new2").value;
+    const err = m => { $("pw-err").textContent = m; show("pw-err", true); };
+    show("pw-err", false);
+    if (!cur || !nw) return err("今のパスワードと新しいパスワードを入力してください。");
+    if (nw.length < 8) return err("新しいパスワードは8文字以上にしてください。");
+    if (nw !== nw2) return err("確認用のパスワードが一致しません。");
+    if (nw === cur) return err("今のパスワードと違うものにしてください。");
+    const btn = $("pw-save"); btn.disabled = true; btn.textContent = "変更中…";
+    try {
+      await store.changePassword(cur, nw);
+      toast("パスワードを変更しました。次回から新しいパスワードでログインしてください");
+      show("v-pw", false); show("v-main", true);
+    } catch (e) {
+      const c = e.code || "";
+      if (c === "demo") err("デモモードではパスワードを変更できません。");
+      else if (c.includes("wrong-password") || c.includes("invalid-credential") || c.includes("invalid-login")) err("今のパスワードが正しくありません。");
+      else if (c.includes("too-many-requests")) err("試行回数が多すぎます。しばらく時間をおいてからお試しください。");
+      else if (c.includes("weak-password")) err("パスワードが簡単すぎます。もっと長いものにしてください。");
+      else err("変更できませんでした。通信状態を確認して、もう一度お試しください。");
+    } finally { btn.disabled = false; btn.textContent = "変更する"; }
+  };
 
   document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
     document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
