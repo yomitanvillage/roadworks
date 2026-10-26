@@ -67,6 +67,13 @@
     .card > summary:focus-visible { outline: 3px solid #7fb3ff; outline-offset: -3px; }
     .card-head { padding: 0 14px 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .card-when { font-size: 14px; color: #333; padding: 2px 14px 0; }
+    /* 規制時間（目立たせる） */
+    .time-pill { display: inline-flex; align-items: center; gap: 6px; margin: 6px 14px 2px; padding: 4px 12px; border-radius: 8px;
+      font-size: 16px; font-weight: 800; color: var(--c); background: color-mix(in srgb, var(--c) 12%, #fff);
+      border: 1px solid color-mix(in srgb, var(--c) 35%, #fff); }
+    .time-pill .tl { font-size: 12px; font-weight: 700; opacity: .85; }
+    .card.ended .time-pill { color: #666; }
+    .pop-time { display: inline-block; margin: 2px 0; padding: 2px 8px; border-radius: 6px; font-weight: 800; font-size: 15px; }
     .card-when b { color: var(--c); }
     .card-body { border-top: 1px solid #eef0f3; padding-top: 10px; }
     .days-label { font-size: 13px; color: #888; padding: 0 14px 6px; }
@@ -107,7 +114,7 @@
 </head>
 <body>
 <header>
-  <h1>🚧 読谷村 道路工事・交通規制マップ</h1>
+  <h1><span data-ic="cone" class="hic"></span>読谷村 道路工事・交通規制マップ</h1>
   <p>村内の道路工事の場所と日程を地図で確認できます</p>
 </header>
 <div class="realtime-bar"><span class="dot"></span>リアルタイムで自動更新されます<span id="last-updated"></span></div>
@@ -179,11 +186,23 @@
     return true;
   }
 
+  // 規制時間の表示（例：9:00〜16:00）。未入力なら空
+  // 吹き出しが左上のズームボタンに重ならないよう余白をとる
+  const POP_OPTS = { maxWidth: 240, autoPanPaddingTopLeft: [60, 16], autoPanPaddingBottomRight: [16, 16] };
+  const hm = v => v ? v.replace(/^0(\d)/, "$1") : "";
+  function timeLabel(w) {
+    if (w.timeFrom && w.timeTo) return `${hm(w.timeFrom)}〜${hm(w.timeTo)}`;
+    if (w.timeFrom) return `${hm(w.timeFrom)}〜`;
+    if (w.timeTo) return `〜${hm(w.timeTo)}`;
+    return "";
+  }
   function popupHtml(id, w, s) {
     const t = R.TYPES[w.type] || R.TYPES.other;
+    const tm = timeLabel(w);
     return `<div class="pop-road">${R.esc(w.road)}</div>
       <div>${R.esc(w.place)}</div>
       <div><b style="color:${t.color}">${t.label}</b>／${R.STATUS[s].label}</div>
+      ${tm ? `<div class="pop-time" style="color:${t.color};background:color-mix(in srgb, ${t.color} 12%, #fff)">${R.icon("clock")} ${tm}</div>` : ""}
       <div>${R.esc(R.periodText(w))}</div>
       <button class="pop-link" onclick="showCard('${id}')">詳しく見る</button>`;
   }
@@ -219,7 +238,7 @@
       } else {
         layer = L.marker(pts[0], { icon: pinIcon(t, dim), title: w.road });
       }
-      layer.bindPopup(popupHtml(w.id, w, s));
+      layer.bindPopup(popupHtml(w.id, w, s), POP_OPTS);
       layer.addTo(map);
       layers[w.id] = layer;
       bounds.push(...pts);
@@ -267,7 +286,7 @@
 
   function pinIcon(t, dim) {
     return L.divIcon({ className: "", iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -16],
-      html: `<div class="pin${dim ? " dim" : ""}" style="--c:${t.color}">${t.icon}</div>` });
+      html: `<div class="pin${dim ? " dim" : ""}" style="--c:${t.color}">${R.icon(t.icon)}</div>` });
   }
 
   function row(k, v, html) {
@@ -277,7 +296,7 @@
 
   // 一覧の1行目に出す「いつ」の要約
   function whenText(w, s, today) {
-    const time = R.timeText(w) ? `（${R.timeText(w)}）` : "";
+    const time = "";  // 時間は上の「規制時間」で目立たせて表示
     if (s === "active") return `<b>本日 ${R.TYPES[w.type]?.short || ""}</b>${time}　期間：${R.esc(R.periodText(w))}`;
     if (s === "off") { const n = R.workDays(w, today, 1)[0]; return `次の施工日：<b>${n ? R.fmtD(n) : "なし"}</b>　期間：${R.esc(R.periodText(w))}`; }
     if (s === "planned") return `<b>${R.fmtD(w.start)} から</b>${time}　期間：${R.esc(R.periodText(w))}`;
@@ -305,13 +324,13 @@
       <summary>
         <div class="card-head"><span class="badge ${R.STATUS[s].cls}">${R.STATUS[s].label}</span><span class="type-tag">${t.label}</span></div>
         <div class="card-road">${R.esc(w.road)}</div>
-        <div class="card-place" style="padding-bottom:2px;">📍 ${R.esc(w.place)}</div>
+        <div class="card-place" style="padding-bottom:2px;">${R.icon("pin")} ${R.esc(w.place)}</div>
+        ${timeLabel(w) ? `<div class="time-pill">${R.icon("clock")}<span class="tl">規制時間</span><span>${timeLabel(w)}</span></div>` : ""}
         <div class="card-when">${whenText(w, s, today)}</div>
       </summary>
       <div class="card-body">
         ${daysHtml(w, today)}
         <div class="rows">
-          ${row("時間", R.timeText(w))}
           ${row("迂回路", w.detour)}
           ${row("備考", w.note)}
           ${row("工事名", w.title)}
@@ -319,7 +338,7 @@
           ${row("施工業者", w.contractor)}
           ${row("連絡先", w.contact ? R.telLink(w.contact) : "", true)}
         </div>
-        <div class="card-foot"><button onclick="focusWork('${w.id}')">🗺️ 地図で見る</button></div>
+        <div class="card-foot"><button onclick="focusWork('${w.id}')">${R.icon("map")} 地図で見る</button></div>
       </div>
     </details>`;
   }
@@ -333,11 +352,11 @@
     if (!layers[id] && endedWorks[id]) {
       // 終了した工事は一時的に灰色で表示
       const w = endedWorks[id], pts = R.geomLatLngs(w.geom);
-      const g = { color: "#9aa5b1", icon: "✓" };
+      const g = { color: "#9aa5b1", icon: "check" };
       tempLayer = (w.geom.kind === "line" && pts.length > 1)
         ? L.featureGroup([L.polyline(pts, { color: g.color, weight: 8, dashArray: "8 8" }), L.marker(pts[Math.floor(pts.length / 2)], { icon: pinIcon(g, true) })])
         : L.featureGroup([L.marker(pts[0], { icon: pinIcon(g, true) })]);
-      tempLayer.bindPopup(popupHtml(id, w, "ended")).addTo(map);
+      tempLayer.bindPopup(popupHtml(id, w, "ended"), POP_OPTS).addTo(map);
       layers.__temp = tempLayer;
       return focusLayer(tempLayer, scroll);
     }
