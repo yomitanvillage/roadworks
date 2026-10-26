@@ -103,7 +103,7 @@
 </head>
 <body>
 <header>
-  <h1>🚧 読谷村道路工事マップ 管理画面</h1>
+  <h1><span data-ic="cone" class="hic"></span>読谷村道路工事マップ 管理画面</h1>
   <span class="who" id="who" hidden></span>
   <button class="hbtn" id="pw-btn" hidden>パスワード変更</button>
   <button class="hbtn" id="logout-btn" hidden>ログアウト</button>
@@ -188,8 +188,8 @@
     <div class="box">
       <div class="box-title">場所を地図で指定<span class="req">必須</span></div>
       <div class="modes">
-        <button class="mode-btn on" data-mode="point">📍 地点（ピン）</button>
-        <button class="mode-btn" data-mode="line">〰 区間（線）</button>
+        <button class="mode-btn on" data-mode="point"><span data-ic="pin"></span> 地点（ピン）</button>
+        <button class="mode-btn" data-mode="line"><span data-ic="route"></span> 区間（線）</button>
       </div>
       <p class="hint" id="mode-hint" style="margin:4px 0 8px;"></p>
       <div class="search-row">
@@ -431,7 +431,7 @@
         <span class="badge" style="background:${t.color};color:#fff">${t.short}</span>
       </div>
       <div class="item-road">${R.esc(w.road)}</div>
-      <div class="item-sub">📍 ${R.esc(w.place)}<br>📅 ${R.esc(R.periodText(w))}${R.timeText(w) ? "　" + R.esc(R.timeText(w)) : ""}</div>
+      <div class="item-sub">${R.icon("pin")} ${R.esc(w.place)}<br>${R.icon("calendar")} ${R.esc(R.periodText(w))}${R.timeText(w) ? "　" + R.esc(R.timeText(w)) : ""}</div>
       <div class="item-meta">最終更新：${R.esc(R.fmtDateTime(w.updatedAt))}　${R.esc(w.updatedBy || "")}</div>
       <div class="item-btns">
         ${ok ? `<button class="btn sm" onclick="editWork('${w.id}')">編集</button>` : `<span class="item-meta">他課の工事のため閲覧のみ</span>`}
@@ -461,7 +461,7 @@
   $("f-dept").innerHTML = C.depts.map(d => `<option>${R.esc(d)}</option>`).join("");
   $("f-orderer").innerHTML = C.orderers.map(d => `<option>${R.esc(d)}</option>`).join("");
   $("types").innerHTML = Object.entries(R.TYPES).map(([k, t]) =>
-    `<button class="type-btn" data-type="${k}" style="--c:${t.color}">${t.icon} ${t.label}</button>`).join("");
+    `<button class="type-btn" data-type="${k}" style="--c:${t.color}">${R.icon(t.icon)} ${t.label}</button>`).join("");
   $("types").onclick = e => { const b = e.target.closest(".type-btn"); if (b) { ftype = b.dataset.type; renderTypes(); drawGeom(); } };
   function renderTypes() { document.querySelectorAll(".type-btn").forEach(b => b.classList.toggle("on", b.dataset.type === ftype)); }
 
@@ -540,7 +540,7 @@
     if (glayer) emap.removeLayer(glayer);
     const t = R.TYPES[ftype], pts = R.geomLatLngs(geom), parts = [];
     if (geom && geom.kind === "point") {
-      parts.push(L.marker(pts[0], { icon: L.divIcon({ className: "", iconSize: [30, 30], iconAnchor: [15, 15], html: `<div class="pin" style="--c:${t.color}">${t.icon}</div>` }) }));
+      parts.push(L.marker(pts[0], { icon: L.divIcon({ className: "", iconSize: [30, 30], iconAnchor: [15, 15], html: `<div class="pin" style="--c:${t.color}">${R.icon(t.icon)}</div>` }) }));
     } else if (pts.length) {
       if (pts.length > 1) parts.push(L.polyline(pts, { color: t.color, weight: 8, opacity: .85 }));
       pts.forEach(p => parts.push(L.marker(p, { icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="vx"></div>' }) })));
