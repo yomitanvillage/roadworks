@@ -31,6 +31,9 @@
     .sum-planned .sum-num { color: #1d3557; }
 
     .chips { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .chip .cnt { display: inline-block; min-width: 1.6em; margin-left: 6px; padding: 0 6px; border-radius: 10px; background: #eef1f5; color: #1d3557; font-size: 13px; font-weight: 700; text-align: center; }
+    .chip.on .cnt { background: rgba(255,255,255,.22); color: #fff; }
+    .lt-cnt { margin-left: 8px; font-size: 13px; font-weight: 700; color: #fff; background: #1d3557; border-radius: 10px; padding: 1px 9px; vertical-align: 1px; }
     .chip { border: 1px solid #c8ced6; background: #fff; border-radius: 20px; padding: 8px 14px; font-size: 15px; cursor: pointer; font-family: inherit; color: #333; }
     .chip.on { background: #1d3557; border-color: #1d3557; color: #fff; font-weight: 700; }
 
@@ -110,6 +113,25 @@
     .notes { font-size: 14px; color: #555; background: #fff; border-radius: 12px; border: 1px solid #e2e5ea; padding: 12px 14px; line-height: 1.7; margin-top: 18px; }
     .notes li { margin-left: 1.2em; }
     .notes a { color: #1d4ed8; }
+    /* スマホ：1画面に「地図」と「工事カードの先頭」が入るように詰める */
+    @media (max-width: 640px) {
+      header { padding: 10px 16px 8px; }
+      header h1 { font-size: 16px; }
+      header p { font-size: 12px; }
+      .realtime-bar { padding: 4px 12px; font-size: 11.5px; flex-wrap: nowrap; white-space: nowrap; }
+      .rt-long { display: none; }
+      .rt-short { display: inline !important; }
+      .summary { display: none; }
+      .app { padding-top: 10px; }
+      .chips { flex-wrap: nowrap; overflow-x: auto; gap: 6px; margin-bottom: 8px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+      .chips::-webkit-scrollbar { display: none; }
+      .chip { flex-shrink: 0; padding: 6px 12px; font-size: 14px; }
+      #map { height: 36vh; min-height: 220px; max-height: 320px; }
+      .legend { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; font-size: 12px; gap: 12px; margin: 6px 0 10px; padding-bottom: 2px; scrollbar-width: none; }
+      .legend::-webkit-scrollbar { display: none; }
+      .section-title { margin-bottom: 4px; }
+      .list-hint { font-size: 12px; margin: 0 2px 8px; }
+    }
   </style>
 </head>
 <body>
@@ -117,7 +139,7 @@
   <h1><span data-ic="cone" class="hic"></span>読谷村 道路工事・交通規制マップ</h1>
   <p>村内の道路工事の場所と日程を地図で確認できます</p>
 </header>
-<div class="realtime-bar"><span class="dot"></span>リアルタイムで自動更新されます<span id="last-updated"></span></div>
+<div class="realtime-bar"><span class="dot"></span><span class="rt-long">リアルタイムで自動更新されます</span><span class="rt-short" style="display:none">自動更新中</span><span id="last-updated"></span></div>
 <div class="demo-bar" id="demo-bar" style="display:none;">デモモードで表示中です（公式HP掲載の工事情報〔10月9日更新分〕を入れています。位置はおおよそです）</div>
 
 <main class="app">
@@ -127,9 +149,9 @@
   </div>
 
   <div class="chips" role="group" aria-label="表示の絞り込み">
-    <button class="chip on" data-f="all">すべて</button>
-    <button class="chip" data-f="active">本日 規制あり</button>
-    <button class="chip" data-f="upcoming">今後の予定</button>
+    <button class="chip on" data-f="all">すべて<span class="cnt" id="c-all"></span></button>
+    <button class="chip" data-f="active">本日 規制あり<span class="cnt" id="c-active"></span></button>
+    <button class="chip" data-f="upcoming">今後の予定<span class="cnt" id="c-upcoming"></span></button>
   </div>
 
   <div class="layout">
@@ -139,7 +161,7 @@
   </div>
 
   <div class="list-col">
-  <h2 class="section-title">工事の一覧</h2>
+  <h2 class="section-title" id="list-title">工事の一覧</h2>
   <p class="list-hint">工事をタップすると詳しい情報が開き、地図もその場所へ移動します。</p>
   <div id="list"><div class="empty">読み込み中です…</div></div>
 
@@ -213,6 +235,12 @@
     const pub = all.filter(w => w.published !== false);
     document.getElementById("n-active").textContent = pub.filter(w => R.statusOf(w, today) === "active").length;
     document.getElementById("n-planned").textContent = pub.filter(w => ["planned", "off"].includes(R.statusOf(w, today))).length;
+    // 絞り込みボタンにも件数を表示（スマホでは上の大きな件数表示を省くため）
+    const nA = pub.filter(w => R.statusOf(w, today) === "active").length;
+    const nU = pub.filter(w => ["planned", "off"].includes(R.statusOf(w, today))).length;
+    document.getElementById("c-all").textContent = nA + nU;
+    document.getElementById("c-active").textContent = nA;
+    document.getElementById("c-upcoming").textContent = nU;
 
     const latest = all.map(w => w.updatedAt).filter(Boolean).sort().pop();
     document.getElementById("last-updated").textContent = latest ? `（最終更新：${R.fmtDateTime(latest)}）` : "";
@@ -250,6 +278,7 @@
 
     // 一覧
     const list = document.getElementById("list");
+    document.getElementById("list-title").innerHTML = `工事の一覧<span class="lt-cnt">${shown.length}件</span>`;
     let html = shown.length ? shown.map(w => cardHtml(w, today)).join("")
       : `<div class="empty">${filter === "all" ? "現在、掲載中の道路工事はありません。" : "該当する工事はありません。"}</div>`;
     // 直近7日以内に終了した工事（折りたたみ）
