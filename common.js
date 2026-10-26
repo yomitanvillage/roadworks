@@ -3,10 +3,10 @@
 // ============================================================
 (function () {
   const TYPES = {
-    closed:    { label: "全面通行止め", short: "通行止め", color: "#c1121f", icon: "⛔" },
-    alternate: { label: "片側交互通行", short: "片側交互", color: "#e85d04", icon: "🚧" },
-    lane:      { label: "車線規制",     short: "車線規制", color: "#b08900", icon: "🚧" },
-    other:     { label: "その他の規制", short: "その他",   color: "#52606d", icon: "⚠️" }
+    closed:    { label: "全面通行止め", short: "通行止め", color: "#c1121f", icon: "closed" },
+    alternate: { label: "片側交互通行", short: "片側交互", color: "#e85d04", icon: "alternate" },
+    lane:      { label: "車線規制",     short: "車線規制", color: "#b08900", icon: "lane" },
+    other:     { label: "その他の規制", short: "その他",   color: "#52606d", icon: "other" }
   };
   const STATUS = {
     active:  { label: "本日 規制あり",   cls: "st-active"  },
@@ -108,6 +108,36 @@
     return { rows, more: d <= w.end };
   }
 
+  // ── SVGアイコン（絵文字の代わり。色は文字色 currentColor に従う） ──
+  const S = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const ICONS = {
+    cone: '<g fill="currentColor"><path d="M10.4 2.5h3.2l1.5 5.5H8.9z"/><path d="M8.4 10h7.2l1.4 5.5H7z"/><path d="M6.5 17.5h11l.6 2H5.9z"/><rect x="3" y="20" width="18" height="2.2" rx="1"/></g>',
+    pin: `<g ${S}><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></g>`,
+    clock: `<g ${S}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></g>`,
+    map: `<g ${S}><path d="M3 6.5l6-2.5 6 2.5 6-2.5v13.5l-6 2.5-6-2.5-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></g>`,
+    calendar: `<g ${S}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></g>`,
+    route: `<g ${S}><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="5.5" r="2"/><path d="M7.5 18.5H14a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6.5"/></g>`,
+    check: `<g ${S}><path d="M5 12.5l4.5 4.5L19 7.5"/></g>`,
+    closed: `<g ${S}><circle cx="12" cy="12" r="9"/><path d="M7 12h10" stroke-width="3"/></g>`,
+    alternate: `<g ${S}><path d="M8 20V5M4.5 8.5L8 5l3.5 3.5M16 4v15M12.5 15.5L16 19l3.5-3.5"/></g>`,
+    lane: `<g ${S}><path d="M5 21L8 3M19 21L16 3"/><path d="M12 4v2.5M12 10v2.5M12 16v2.5"/></g>`,
+    other: `<g ${S}><path d="M12 3.5l9 16H3z"/><path d="M12 10v4"/><path d="M12 17v.2" stroke-width="2.6"/></g>`
+  };
+  function icon(name, cls) {
+    return `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] || ""}</svg>`;
+  }
+  (function () {
+    const st = document.createElement("style");
+    st.textContent = ".ic{width:1.15em;height:1.15em;vertical-align:-0.2em;flex-shrink:0;display:inline-block}" +
+      ".pin .ic{width:18px;height:18px;color:#fff;vertical-align:0}" +
+      ".hic{color:#f39a3a;margin-right:4px}";
+    document.head.appendChild(st);
+    // HTMLに書いた <span data-ic="名前"></span> をアイコンに置き換える
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll("[data-ic]").forEach(el => { el.outerHTML = icon(el.dataset.ic, el.className); });
+    });
+  })();
+
   // 地図タイル：OpenStreetMap（選挙特設サイトと同じ）
   const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
   const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
@@ -137,5 +167,5 @@
   }
 
   window.RW = { TYPES, STATUS, todayJST, addDays, fmtD, fmtShort, fmtDateTime, skipList, isOff, statusOf,
-    workDays, periodText, timeText, offText, sortWorks, geomLatLngs, dayRows, esc, telLink, TILE_URL, TILE_ATTR };
+    workDays, periodText, timeText, offText, sortWorks, geomLatLngs, dayRows, esc, telLink, icon, TILE_URL, TILE_ATTR };
 })();
