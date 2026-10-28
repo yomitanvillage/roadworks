@@ -81,10 +81,26 @@
     .search-row .btn { white-space: nowrap; flex-shrink: 0; }
     .search-results { margin-bottom: 8px; }
     .search-results button { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #e2e5ea; background: #fff; font-size: 14px; cursor: pointer; font-family: inherit; border-radius: 6px; margin-bottom: 4px; }
+    .vx-dim { width: 10px; height: 10px; background: #fff; border: 2px solid #6b7785; border-radius: 50%; }
+    .parts { margin: 0 0 12px; }
+    .part-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid #e2e5ea; border-radius: 8px; margin-bottom: 6px; font-size: 14px; background: #fff; }
+    .part-row.active { border-color: #1d3557; background: #f4f7fb; }
+    .part-row .nm { flex: 1; cursor: pointer; }
+    .part-row .nm .ic { margin-right: 4px; }
     .vx { width: 14px; height: 14px; background: #fff; border: 3px solid #1d3557; border-radius: 50%; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
     .dchip { background: #eef1f5; border-radius: 20px; padding: 4px 6px 4px 12px; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
     .dchip button { border: none; background: #c8ced6; color: #fff; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 20px; }
+    .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin: 8px 0 4px; }
+    .dbtn { position: relative; border: 1px solid color-mix(in srgb, var(--dc) 40%, #fff); background: color-mix(in srgb, var(--dc) 13%, #fff); border-radius: 8px; padding: 5px 2px; font: inherit; font-size: 12px; line-height: 1.35; cursor: pointer; color: #222; }
+    .dbtn .dd { font-size: 14px; font-weight: 700; }
+    .dbtn .dt { color: var(--dc); font-weight: 700; }
+    .dbtn.ex::after { content: "変更"; position: absolute; top: -7px; right: -4px; background: #1d3557; color: #fff; font-size: 10px; padding: 0 5px; border-radius: 8px; }
+    .dbtn.sel { outline: 3px solid #1d3557; outline-offset: 1px; }
+    .dedit { background: #fff; border: 1px solid #c8d3e1; border-radius: 10px; padding: 10px; margin: 8px 0 4px; }
+    .dedit-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: #1d3557; }
+    .dedit .types { margin-bottom: 0; }
+    .dedit .type-btn { padding: 9px 6px; font-size: 14px; }
     .preview { background: #f4f7fb; border: 1px solid #d8e2ef; border-radius: 8px; padding: 10px 12px; font-size: 14px; line-height: 1.6; color: #1d3557; margin-bottom: 12px; }
     .pin { width: 30px; height: 30px; border-radius: 50%; background: var(--c); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; font-size: 14px; }
     .sticky-save { position: sticky; bottom: 0; background: linear-gradient(transparent, #eef1f5 30%); padding: 18px 0 12px; display: flex; gap: 8px; }
@@ -199,11 +215,13 @@
       <div class="search-results" id="search-results"></div>
       <div id="edit-map"></div>
       <div class="map-tools">
+        <button class="btn sm" id="newline-btn">＋ 新しい線を引く</button>
         <button class="btn sm sub" id="undo-btn">1つ戻す</button>
         <button class="btn sm danger" id="clear-btn">やり直す</button>
         <button class="btn sm sub" id="fit-btn">指定した場所を表示</button>
       </div>
       <div class="geo-status geo-ng" id="geo-status"></div>
+      <div class="parts" id="parts-list"></div>
     </div>
 
     <div class="box">
@@ -257,7 +275,7 @@
 
   const FIELD_LABELS = { type: "規制の種類", road: "路線名", place: "施工箇所", geom: "地図上の場所", start: "開始日", end: "終了日",
     timeFrom: "時間（から）", timeTo: "時間（まで）", weekendsOff: "土日の扱い", skipDates: "施工しない日", dept: "担当課",
-    orderer: "発注者", title: "工事名", contractor: "施工業者", contact: "連絡先", detour: "迂回路", note: "備考", published: "公開設定" };
+    orderer: "発注者", title: "工事名", contractor: "施工業者", contact: "連絡先", detour: "迂回路", note: "備考", published: "公開設定", dayTypes: "日ごとの規制" };
 
   // ════════ データ層（デモ / Firebase） ════════
   let store;
@@ -429,6 +447,7 @@
         ${w.published === false ? '<span class="badge b-draft">下書き（非公開）</span>' : ""}
         <span class="badge b-dept">${R.esc(w.dept)}</span>
         <span class="badge" style="background:${t.color};color:#fff">${t.short}</span>
+        ${R.hasMixedTypes(w) ? '<span class="badge b-dept">日により規制変更あり</span>' : ""}
       </div>
       <div class="item-road">${R.esc(w.road)}</div>
       <div class="item-sub">${R.icon("pin")} ${R.esc(w.place)}<br>${R.icon("calendar")} ${R.esc(R.periodText(w))}${R.timeText(w) ? "　" + R.esc(R.timeText(w)) : ""}</div>
@@ -455,14 +474,28 @@
   }
 
   // ════════ 編集フォーム ════════
-  let editingId = null, prevData = null, geom = null, mode = "point", skipDates = [], ftype = "closed";
+  let editingId = null, prevData = null, mode = "point", skipDates = [], ftype = "closed";
+  // 場所：線・ピンを複数持てる。parts = [{kind:"point",lat,lng} | {kind:"line",coords:[{lat,lng}…]}]
+  let parts = [], active = -1;   // active = いま引いている線の番号（-1 = なし）
+  const lineOk = p => p.kind === "point" || p.coords.length >= 2;
+  function buildGeom() {
+    const ok = parts.filter(lineOk);
+    if (!ok.length) return null;
+    return ok.length === 1 ? ok[0] : { kind: "multi", parts: ok };
+  }
+  let dayTypes = {}, selDay = null;   // 日ごとの規制（基本と違う日だけ）
   let emap = null, glayer = null;
 
   $("f-dept").innerHTML = C.depts.map(d => `<option>${R.esc(d)}</option>`).join("");
   $("f-orderer").innerHTML = C.orderers.map(d => `<option>${R.esc(d)}</option>`).join("");
   $("types").innerHTML = Object.entries(R.TYPES).map(([k, t]) =>
     `<button class="type-btn" data-type="${k}" style="--c:${t.color}">${R.icon(t.icon)} ${t.label}</button>`).join("");
-  $("types").onclick = e => { const b = e.target.closest(".type-btn"); if (b) { ftype = b.dataset.type; renderTypes(); drawGeom(); } };
+  $("types").onclick = e => {
+    const b = e.target.closest(".type-btn"); if (!b) return;
+    ftype = b.dataset.type; renderTypes(); drawGeom();
+    // 日ごとの変更は消さずに残す（基本と同じになった日は保存時に自動で外れる）
+    renderSkip();
+  };
   function renderTypes() { document.querySelectorAll(".type-btn").forEach(b => b.classList.toggle("on", b.dataset.type === ftype)); }
 
   function openForm(id, src, isCopy) {
@@ -476,13 +509,16 @@
     $("f-tfrom").value = w.timeFrom || ""; $("f-tto").value = w.timeTo || "";
     $("f-weekends").checked = !!w.weekendsOff;
     skipDates = R.skipList(w).slice();
+    dayTypes = { ...R.dayTypesOf(w) }; selDay = null;
     $("f-dept").value = w.dept || me.dept; $("f-dept").disabled = me.role !== "admin";
     $("f-orderer").value = w.orderer || "読谷村";
     ["title", "contractor", "contact", "detour", "note"].forEach(k => $("f-" + k).value = w[k] || "");
     $("f-published").checked = w.published !== false;
-    geom = w.geom ? structuredClone(w.geom) : null;
-    if (geom && geom.kind === "line") geom.coords = R.geomLatLngs(geom).map(([lat, lng]) => ({ lat, lng }));
-    setMode(geom ? geom.kind : "point", true);
+    parts = R.geomParts(w.geom).map(p => p.kind === "point"
+      ? { kind: "point", lat: p.pts[0][0], lng: p.pts[0][1] }
+      : { kind: "line", coords: p.pts.map(([lat, lng]) => ({ lat, lng })) });
+    active = -1;
+    setMode(parts.length ? parts[0].kind : "point", true);
     $("search-results").innerHTML = ""; show("edit-err", false);
 
     show("v-main", false); show("v-edit", true); window.scrollTo(0, 0);
@@ -508,51 +544,77 @@
   function updateSaveLabel() { $("save-btn").textContent = $("f-published").checked ? "保存して公開" : "下書きとして保存"; }
 
   // 地図操作
-  document.querySelectorAll(".mode-btn").forEach(b => b.onclick = () => {
-    if (b.dataset.mode === mode) return;
-    if (geom && !confirm("指定した場所が消えます。切り替えますか？")) return;
-    geom = null; setMode(b.dataset.mode);
-  });
+  document.querySelectorAll(".mode-btn").forEach(b => b.onclick = () => { active = -1; setMode(b.dataset.mode); });
   function setMode(m, silent) {
     mode = m;
     document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+    $("newline-btn").hidden = m !== "line";
     $("mode-hint").textContent = m === "point"
-      ? "地図上の工事箇所をタップすると、ピンが立ちます。もう一度タップすると位置を移動できます。"
-      : "通行止めなどの区間を、始点から終点まで道路に沿って順にタップしてください（2点以上）。";
+      ? "工事箇所をタップするとピンが立ちます。飛び地など場所が複数あるときは、続けてタップするとピンを追加できます。"
+      : "区間を始点から終点まで、道路に沿って順にタップします。十字路や飛び地で2本目以降の線を引くときは「＋ 新しい線を引く」を押してから引き始めてください。";
     if (!silent) drawGeom();
   }
   function onMapClick(e) {
     const p = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
-    if (mode === "point") geom = { kind: "point", ...p };
-    else { if (!geom || geom.kind !== "line") geom = { kind: "line", coords: [] }; geom.coords.push(p); }
+    if (mode === "point") { parts.push({ kind: "point", ...p }); active = -1; }
+    else {
+      if (active < 0 || !parts[active] || parts[active].kind !== "line") { parts.push({ kind: "line", coords: [] }); active = parts.length - 1; }
+      parts[active].coords.push(p);
+    }
     drawGeom();
   }
+  $("newline-btn").onclick = () => {
+    if (active >= 0 && parts[active] && parts[active].coords.length < 2) return toast("今の線を2点以上引いてから、次の線を始めてください");
+    active = -1; drawGeom(); toast("次にタップした所から、新しい線が始まります");
+  };
   $("undo-btn").onclick = () => {
-    if (!geom) return;
-    if (geom.kind === "line" && geom.coords.length > 1) geom.coords.pop(); else geom = null;
+    if (!parts.length) return;
+    const i = active >= 0 ? active : parts.length - 1, q = parts[i];
+    if (q.kind === "line" && q.coords.length > 1) { q.coords.pop(); active = i; }
+    else { parts.splice(i, 1); active = -1; }
     drawGeom();
   };
-  $("clear-btn").onclick = () => { geom = null; drawGeom(); };
+  $("clear-btn").onclick = () => {
+    if (parts.length > 1 && !confirm("指定した線・ピンをすべて消しますか？")) return;
+    parts = []; active = -1; drawGeom();
+  };
+  window.rmPart = i => { parts.splice(i, 1); if (active === i) active = -1; else if (active > i) active--; drawGeom(); };
+  window.focusPart = i => {
+    const q = parts[i]; if (!q) return;
+    const pts = q.kind === "point" ? [[q.lat, q.lng]] : q.coords.map(c => [c.lat, c.lng]);
+    emap.fitBounds(pts, { padding: [50, 50], maxZoom: 17 });
+    if (q.kind === "line") { active = i; setMode("line"); }
+  };
   $("fit-btn").onclick = fitGeom;
-  function fitGeom() { const pts = R.geomLatLngs(geom); if (pts.length) emap.fitBounds(pts, { padding: [50, 50], maxZoom: 17 }); }
+  function fitGeom() { const pts = R.geomLatLngs(buildGeom()); if (pts.length) emap.fitBounds(pts, { padding: [50, 50], maxZoom: 17 }); }
   function drawGeom() {
     if (!emap) return;
     if (glayer) emap.removeLayer(glayer);
-    const t = R.TYPES[ftype], pts = R.geomLatLngs(geom), parts = [];
-    if (geom && geom.kind === "point") {
-      parts.push(L.marker(pts[0], { icon: L.divIcon({ className: "", iconSize: [30, 30], iconAnchor: [15, 15], html: `<div class="pin" style="--c:${t.color}">${R.icon(t.icon)}</div>` }) }));
-    } else if (pts.length) {
-      if (pts.length > 1) parts.push(L.polyline(pts, { color: t.color, weight: 8, opacity: .85 }));
-      pts.forEach(p => parts.push(L.marker(p, { icon: L.divIcon({ className: "", iconSize: [14, 14], iconAnchor: [7, 7], html: '<div class="vx"></div>' }) })));
-    }
-    glayer = L.layerGroup(parts).addTo(emap);
+    const t = R.TYPES[ftype], items = [];
+    parts.forEach((q, i) => {
+      if (q.kind === "point") {
+        items.push(L.marker([q.lat, q.lng], { icon: L.divIcon({ className: "", iconSize: [30, 30], iconAnchor: [15, 15], html: `<div class="pin" style="--c:${t.color}">${R.icon(t.icon)}</div>` }) }));
+      } else {
+        const pts = q.coords.map(c => [c.lat, c.lng]), on = i === active;
+        if (pts.length > 1) items.push(L.polyline(pts, { color: t.color, weight: on ? 9 : 7, opacity: on ? .95 : .7 }));
+        pts.forEach(p => items.push(L.marker(p, { interactive: false, icon: L.divIcon({ className: "", iconSize: on ? [14, 14] : [10, 10], iconAnchor: on ? [7, 7] : [5, 5], html: on ? '<div class="vx"></div>' : '<div class="vx-dim"></div>' }) })));
+      }
+    });
+    glayer = L.layerGroup(items).addTo(emap);
+    // 状態表示
+    const nL = parts.filter(q => q.kind === "line").length, nP = parts.length - nL;
+    const short = parts.findIndex(q => !lineOk(q));
     const st = $("geo-status");
-    const ok = geom && (geom.kind === "point" || geom.coords.length >= 2);
-    st.className = "geo-status " + (ok ? "geo-ok" : "geo-ng");
-    st.textContent = !geom ? "まだ場所が指定されていません。地図をタップしてください。"
-      : geom.kind === "point" ? "✓ 地点を指定しました"
-      : geom.coords.length < 2 ? "区間の終点まで続けてタップしてください（現在1点）"
-      : `✓ 区間を指定しました（${geom.coords.length}点）`;
+    st.className = "geo-status " + (parts.length && short < 0 ? "geo-ok" : "geo-ng");
+    st.textContent = !parts.length ? "まだ場所が指定されていません。地図をタップしてください。"
+      : short >= 0 ? `線${parts.slice(0, short + 1).filter(q => q.kind === "line").length}の終点まで続けてタップしてください（現在1点）`
+      : `✓ 場所を指定しました（${[nL ? `線${nL}本` : "", nP ? `地点${nP}か所` : ""].filter(Boolean).join("・")}）`;
+    // 線・ピンの一覧（2つ以上のときだけ表示）
+    let li = 0, pi = 0;
+    $("parts-list").innerHTML = parts.length > 1 ? parts.map((q, i) => {
+      const nm = q.kind === "line" ? `${R.icon("route")}線${++li}（${q.coords.length}点）${i === active ? "　← 引いている途中" : ""}` : `${R.icon("pin")}地点${++pi}`;
+      return `<div class="part-row${i === active ? " active" : ""}"><span class="nm" onclick="focusPart(${i})">${nm}</span><button class="btn sm danger" onclick="rmPart(${i})">削除</button></div>`;
+    }).join("") : "";
   }
 
   // 地名検索（国土地理院 住所検索）
@@ -586,14 +648,40 @@
     $("skip-chips").innerHTML = skipDates.map(d => `<span class="dchip">${R.fmtShort(d)}<button onclick="rmSkip('${d}')" aria-label="削除">✕</button></span>`).join("");
     const w = { start: $("f-start").value, end: $("f-end").value, weekendsOff: $("f-weekends").checked, skipDates };
     if (!w.start || !w.end || w.end < w.start) { $("preview").textContent = "開始日と終了日を正しく入力してください。"; return; }
-    const days = R.workDays(w);
-    $("preview").innerHTML = `<b>施工日（${days.length}日）</b><br>${days.slice(0, 20).map(R.fmtShort).join("、")}${days.length > 20 ? " ほか" : ""}`;
+    const days = R.workDays(w), LIMIT = 62, DOW = ["日", "月", "火", "水", "木", "金", "土"];
+    if (selDay && !days.includes(selDay)) selDay = null;
+    const nEx = days.filter(d => dayTypes[d] && dayTypes[d] !== ftype).length;
+    const cells = days.slice(0, LIMIT).map(d => {
+      const t = dayTypes[d] || ftype, T = R.TYPES[t], dt = new Date(d + "T00:00:00+09:00");
+      const ex = dayTypes[d] && dayTypes[d] !== ftype;
+      return `<button type="button" class="dbtn${ex ? " ex" : ""}${selDay === d ? " sel" : ""}" data-d="${d}" style="--dc:${T.color}" aria-label="${R.fmtD(d)} ${T.label}">
+        <div class="dd">${dt.getMonth() + 1}/${dt.getDate()}</div><div>${DOW[dt.getDay()]}</div><div class="dt">${T.mini}</div></button>`;
+    }).join("");
+    let editor = "";
+    if (selDay) {
+      const cur = dayTypes[selDay] || ftype;
+      editor = `<div class="dedit"><div class="dedit-title">${R.fmtD(selDay)} の規制</div><div class="types">` +
+        Object.entries(R.TYPES).map(([k, T]) => `<button type="button" class="type-btn${cur === k ? " on" : ""}" data-dt="${k}" style="--c:${T.color}">${R.icon(T.icon)} ${T.label}${k === ftype ? "（基本）" : ""}</button>`).join("") +
+        `</div></div>`;
+    }
+    $("preview").innerHTML = `<b>施工日（${days.length}日）</b>${nEx ? `　<span style="color:#1d3557">うち${nEx}日は規制を変更</span>` : ""}
+      <div class="hint" style="margin:4px 0 0;">日付をタップすると、その日だけ規制の種類を変えられます（通行止めの日だけある工事など）。</div>
+      <div class="dgrid">${cells}</div>${days.length > LIMIT ? `<div class="hint" style="margin:0;">※ 最初の${LIMIT}日分を表示しています</div>` : ""}${editor}`;
   }
+  $("preview").addEventListener("click", e => {
+    const db = e.target.closest(".dbtn");
+    if (db) { selDay = selDay === db.dataset.d ? null : db.dataset.d; renderSkip(); return; }
+    const tb = e.target.closest("[data-dt]");
+    if (tb && selDay) {
+      if (tb.dataset.dt === ftype) delete dayTypes[selDay]; else dayTypes[selDay] = tb.dataset.dt;
+      renderSkip();
+    }
+  });
 
   // 保存
   $("save-btn").onclick = async () => {
     const data = {
-      type: ftype, road: $("f-road").value.trim(), place: $("f-place").value.trim(), geom,
+      type: ftype, road: $("f-road").value.trim(), place: $("f-place").value.trim(), geom: buildGeom(),
       start: $("f-start").value, end: $("f-end").value, timeFrom: $("f-tfrom").value, timeTo: $("f-tto").value,
       weekendsOff: $("f-weekends").checked, skipDates: skipDates.filter(d => d >= $("f-start").value && d <= $("f-end").value),
       dept: me.role === "admin" ? $("f-dept").value : me.dept, orderer: $("f-orderer").value,
@@ -603,11 +691,15 @@
     const errs = [];
     if (!data.road) errs.push("路線名");
     if (!data.place) errs.push("施工箇所（目印）");
-    if (!geom || (geom.kind === "line" && geom.coords.length < 2)) errs.push("地図上の場所");
+    if (!parts.length || parts.some(q => !lineOk(q))) errs.push("地図上の場所（線は2点以上）");
     if (!data.start || !data.end) errs.push("開始日・終了日");
     if (errs.length) return editError("次の項目を入力してください：" + errs.join("、"));
     if (data.end < data.start) return editError("終了日は開始日以降の日付にしてください。");
     if (!R.workDays(data).length) return editError("施工日が1日もありません。施工しない日の設定をご確認ください。");
+    // 日ごとの規制：期間内の施工日で、基本と違う日だけ残す
+    const dtOut = {};
+    R.workDays(data).forEach(d => { if (dayTypes[d] && dayTypes[d] !== data.type) dtOut[d] = dayTypes[d]; });
+    if (Object.keys(dtOut).length) data.dayTypes = dtOut;
 
     const now = new Date().toISOString();
     const id = editingId || store.newId();
@@ -630,8 +722,9 @@
   };
   function norm(v) {
     if (v === undefined || v === null || v === "") return null;
-    if (v && v.kind) return { kind: v.kind, pts: R.geomLatLngs(v) };
-    if (typeof v === "object") return Object.values(v);
+    if (v && v.kind) return R.geomParts(v).map(q => [q.kind, q.pts]);
+    if (Array.isArray(v)) return v.slice().sort();
+    if (typeof v === "object") return Object.keys(v).sort().map(k => [k, v[k]]);
     return v;
   }
   function editError(msg) { $("edit-err").textContent = msg; show("edit-err", true); $("edit-err").scrollIntoView({ block: "center" }); }
