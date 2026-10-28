@@ -3,10 +3,10 @@
 // ============================================================
 (function () {
   const TYPES = {
-    closed:    { label: "全面通行止め", short: "通行止め", color: "#c1121f", icon: "closed" },
-    alternate: { label: "片側交互通行", short: "片側交互", color: "#e85d04", icon: "alternate" },
-    lane:      { label: "車線規制",     short: "車線規制", color: "#b08900", icon: "lane" },
-    other:     { label: "その他の規制", short: "その他",   color: "#52606d", icon: "other" }
+    closed:    { label: "全面通行止め", short: "通行止め", mini: "通行止", color: "#c1121f", icon: "closed" },
+    alternate: { label: "片側交互通行", short: "片側交互", mini: "片側", color: "#e85d04", icon: "alternate" },
+    lane:      { label: "車線規制",     short: "車線規制", mini: "車線", color: "#b08900", icon: "lane" },
+    other:     { label: "その他の規制", short: "その他",   mini: "規制", color: "#52606d", icon: "other" }
   };
   const STATUS = {
     active:  { label: "本日 規制あり",   cls: "st-active"  },
@@ -53,6 +53,21 @@
     }
     return res;
   }
+  // 日ごとの規制（例外）。dayTypes = { "YYYY-MM-DD": "closed", … } に、基本と違う日だけ入る
+  function dayTypesOf(w) { return (w && w.dayTypes && typeof w.dayTypes === "object") ? w.dayTypes : {}; }
+  function typeOn(w, d) { const t = dayTypesOf(w)[d]; return (t && TYPES[t]) ? t : (w.type || "other"); }
+  function hasMixedTypes(w) {
+    const dt = dayTypesOf(w);
+    return workDays(w).some(d => dt[d] && dt[d] !== w.type);
+  }
+  // 表示に使う規制：今日が施工日なら今日の規制、そうでなければ次の施工日の規制
+  function typeNow(w, today) {
+    today = today || todayJST();
+    const s = statusOf(w, today);
+    if (s === "active") return typeOn(w, today);
+    if (s === "planned" || s === "off") { const n = workDays(w, today, 1)[0]; return n ? typeOn(w, n) : w.type; }
+    return w.type;
+  }
   function periodText(w) {
     if (!w.start) return "";
     return w.start === w.end ? fmtD(w.start) : `${fmtD(w.start)} 〜 ${fmtD(w.end)}`;
@@ -78,12 +93,21 @@
       return (a.start || "").localeCompare(b.start || "");
     });
   }
-  function geomLatLngs(g) {
+  // 場所データ → 部品の配列 [{kind:"point"|"line", pts:[[lat,lng],…]}]
+  //   単独の地点・線（従来の形）と、複数の部品（kind:"multi"）の両方に対応
+  function geomParts(g) {
     if (!g) return [];
-    if (g.kind === "point") return [[g.lat, g.lng]];
-    const c = Array.isArray(g.coords) ? g.coords : Object.values(g.coords || {});
-    return c.map(p => Array.isArray(p) ? p : [p.lat, p.lng]);
+    const arr = x => Array.isArray(x) ? x : Object.values(x || {});
+    const one = q => {
+      if (!q) return null;
+      if (q.kind === "point") return { kind: "point", pts: [[q.lat, q.lng]] };
+      if (q.kind === "line") return { kind: "line", pts: arr(q.coords).map(p => Array.isArray(p) ? p : [p.lat, p.lng]) };
+      return null;
+    };
+    if (g.kind === "multi") return arr(g.parts).map(one).filter(Boolean);
+    const o = one(g); return o ? [o] : [];
   }
+  function geomLatLngs(g) { return geomParts(g).flatMap(p => p.pts); }
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
@@ -167,5 +191,5 @@
   }
 
   window.RW = { TYPES, STATUS, todayJST, addDays, fmtD, fmtShort, fmtDateTime, skipList, isOff, statusOf,
-    workDays, periodText, timeText, offText, sortWorks, geomLatLngs, dayRows, esc, telLink, icon, TILE_URL, TILE_ATTR };
+    workDays, periodText, timeText, offText, sortWorks, geomLatLngs, geomParts, dayRows, esc, telLink, icon, typeOn, typeNow, hasMixedTypes, dayTypesOf, TILE_URL, TILE_ATTR };
 })();
