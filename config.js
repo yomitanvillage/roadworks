@@ -30,7 +30,7 @@ window.RW_CONFIG = {
   contactText: "読谷村役場 都市計画課　098-982-9220",
 
   // 試行運用中の表示（本番接続中でも出る）。正式運用になったら "" にすると消えます
-  trialBadge: "試行版",
-  trialNotice: "試行運用中です。正式な情報は村公式ホームページをご確認ください"
+  trialBadge: "",
+  trialNotice: ""
 };
 window.RW_CONFIG.demo = !window.RW_CONFIG.firebaseConfig.apiKey;
